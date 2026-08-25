@@ -3,13 +3,17 @@
 #   conda env create -f environment.yml
 #   conda activate esp-vmd
 #
-# Deliberately minimal. VMD is NOT a conda package - it is installed separately
-# from https://www.ks.uiuc.edu/Research/vmd/alpha/ (see README section 5).
-# Everything the Python side does is convert grids and write a VMD scene; the
-# `esp` environment from the PyMOL project works just as well.
+# VMD is NOT a conda package - install it separately from
+# https://www.ks.uiuc.edu/Research/vmd/alpha/ (README section 5).
+#
+# numpy      Gitterkonvertierung und die Schalenstatistik
+# matplotlib Farbskala als eigenes PNG (wie in der PyMOL-Pipeline)
+# pillow     VMDs Tachyon schreibt TGA, das wird nach PNG gewandelt
 name: esp-vmd
 channels:
   - conda-forge
 dependencies:
   - python=3.12
   - numpy
+  - matplotlib
+  - pillow
