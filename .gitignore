@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------------------
+# Large data files.
+#
+# A full-resolution cube of a 251^3 grid is ~200 MB and the raw Turbomole
+# pointval output is ~1.25 GB per file. GitHub rejects anything above 100 MB,
+# and these are all regenerable from the raw data with xyzToCube.py.
+# ---------------------------------------------------------------------------
+*.cube
+*.dx
+td.xyz
+tp.xyz
+
+# ...except the reference dataset. Those grids are decimated to 0.75 Bohr
+# (~2.3 MB each) and are committed on purpose: they are RAW pointval files, not
+# cubes, so a fresh clone exercises the whole chain including xyzToCube.py -
+# unit conversion and index reordering included. Shipping cubes instead would
+# skip exactly the step most likely to break.
+!reference/**/td.xyz
+!reference/**/tp.xyz
+
+# Output of the built-in smoke test.
+# It must never overwrite or shadow the committed reference images.
+**/images_check/
+**/esp_check.tcl
+reference/summary_check.csv
+
+# ---------------------------------------------------------------------------
+# VMD scratch output
+#
+# Tachyon/OptiX write an intermediate scene file next to the image, and the
+# interactive session drops snapshots into the working directory. None of it
+# is a deliverable.
+# ---------------------------------------------------------------------------
+vmdscene*
+*.tga
+*.ppm
+*.rgb
+snapshot*.png
+.vmdsession
+# The per-molecule scene script is generated, not authored - like esp.pml was.
+**/esp.tcl
+!scripts/**/*.tcl
+
+# Scratch space for experiments and large intermediate files
+sandbox/*
+!sandbox/.gitkeep
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

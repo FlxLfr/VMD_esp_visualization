@@ -1,0 +1,15 @@
+# Conda environment for the Python side of the VMD ESP visualisation workflow.
+#
+#   conda env create -f environment.yml
+#   conda activate esp-vmd
+#
+# Deliberately minimal. VMD is NOT a conda package - it is installed separately
+# from https://www.ks.uiuc.edu/Research/vmd/alpha/ (see README section 5).
+# Everything this environment does is convert grids and drive VMD in batch mode.
+name: esp-vmd
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - matplotlib          # only needed for the separate colour-bar figure
