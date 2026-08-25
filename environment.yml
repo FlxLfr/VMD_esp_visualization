@@ -5,11 +5,11 @@
 #
 # Deliberately minimal. VMD is NOT a conda package - it is installed separately
 # from https://www.ks.uiuc.edu/Research/vmd/alpha/ (see README section 5).
-# Everything this environment does is convert grids and drive VMD in batch mode.
+# Everything the Python side does is convert grids and write a VMD scene; the
+# `esp` environment from the PyMOL project works just as well.
 name: esp-vmd
 channels:
   - conda-forge
 dependencies:
   - python=3.12
   - numpy
-  - matplotlib          # only needed for the separate colour-bar figure
