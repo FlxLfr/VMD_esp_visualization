@@ -30,6 +30,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import datetime
 
 VIEWS = ("pi", "edge", "sigma")
@@ -67,12 +68,17 @@ def find_vmd(explicit=None):
 
 
 def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
-            shadows=0, snapshot=0, scene="esp.tcl", verbose=True):
+            shadows=0, snapshot=0, scene="esp.tcl", headless=0, verbose=True):
     """Ein VMD-Lauf fuer die angegebenen Ansichten. Rueckgabe: (rc, renderer).
 
     Ein Absturz von VMD hinterlaesst keinen Fehlertext, nur fehlende Dateien -
     deshalb wird das komplette Protokoll mitgeschrieben und angehaengt, damit
     auch der Lauf davor noch nachlesbar ist.
+
+    headless=1 startet VMD mit "-dispdev text": kein Fenster, kein OpenGL. Die
+    Bildgroesse muss dann ueber "-size" auf der Kommandozeile kommen, "display
+    resize" gibt es ohne Display nicht. Der Fenstermitschnitt faellt damit weg -
+    er kopiert den OpenGL-Puffer, den es nicht gibt.
     """
     tcl = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        "render_esp.tcl").replace("\\", "/")
@@ -87,20 +93,31 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
                  # Szenendatei: im Normalfall esp.tcl, im Selbsttest
                  # esp_check.tcl - so bleibt die committete Szene unberuehrt.
                  "set ESP_SCENE {" + scene + "}\n"
+                 # Zielordner MUSS mit: sonst schreibt das Tcl-Skript nach
+                 # images/, waehrend hier in outdir/ gesucht wird - die Bilder
+                 # entstehen, gelten aber als fehlgeschlagen.
+                 # Vorwaertsschraegstriche, damit Tcl die Rueckwaerts-
+                 # schraegstriche von Windows nicht als Escapes liest.
+                 "set ESP_OUTDIR {" + outdir.replace("\\", "/") + "}\n"
+                 "set ESP_PREFIX {" + prefix + "}\n"
+                 f"set ESP_HEADLESS {headless}\n"
                  # Geschweifte Klammern: Tcl substituiert darin nichts und
                  # Leerzeichen im Pfad ("2. Semester") stoeren nicht.
                  "source {" + tcl + "}\n")
+    cmd = [vmd, "-e", "_render_opts.tcl"]
+    if headless:
+        cmd += ["-dispdev", "text", "-size", str(w), str(h)]
     renderer = "TachyonInternal"
     try:
-        out = subprocess.run([vmd, "-e", "_render_opts.tcl"],
-                             capture_output=True, text=True, timeout=1800)
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         text = (out.stdout or "") + (out.stderr or "")
         with open(os.path.join(outdir, "_vmd.log"), "a",
                   encoding="utf-8", errors="replace") as fh:
             fh.write(f"\n===== Durchlauf: {label} ({', '.join(views)}) =====\n")
             fh.write(text)
         for line in text.splitlines():
-            if line.startswith(("->", "!", "==", "Renderer:", "Fenster:")):
+            if line.startswith(("->", "!", "==", "Renderer:", "Fenster:",
+                                "Ziel:")):
                 if verbose or line.startswith("!"):
                     print("   ", line)
                 if line.startswith("Renderer:"):
@@ -233,7 +250,7 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
 def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                vmd=None, res="1600x1280", ao=False, shadows=False,
                keep_tga=False, dpi=300, no_vmd=False, scene="esp.tcl",
-               verbose=True):
+               headless=False, verbose=True):
     """Bildersatz fuer das AKTUELLE Verzeichnis. Erwartet die Szene und die Cubes.
 
     Rueckgabe: dict mit made (Ansicht -> womit gerendert), renderer, size, rng,
@@ -257,14 +274,23 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     # transparenten Lagen und Umgebungsverdeckung. Statt gleich alles
     # herunterzuschrauben: erst in voller Qualitaet, dann nur die fehlenden
     # Ansichten mit weniger. Was womit entstanden ist, steht in settings.txt.
-    passes = ([("AO + Transparenz", dict(ao=1, opaque=0, snapshot=0))]
+    hl = 1 if headless else 0
+    passes = ([("AO + Transparenz", dict(ao=1, opaque=0, snapshot=0,
+                                         headless=hl))]
               if ao else []) + [
-        ("Transparenz", dict(ao=0, opaque=0, snapshot=0)),
+        ("Transparenz", dict(ao=0, opaque=0, snapshot=0, headless=hl)),
         # Tachyon steigt in der Achsenansicht an den vielen durchquerten
         # transparenten Lagen aus. Der Fenstermitschnitt kennt keine
         # Rekursion und behaelt die Transparenz - erst danach opak.
-        ("Transparenz, Fensterbild", dict(ao=0, opaque=0, snapshot=1)),
-        ("opak", dict(ao=0, opaque=1, snapshot=0))]
+        #
+        # Dieser eine Durchgang braucht das Fenster: er kopiert den
+        # OpenGL-Puffer. Auch mit --headless wird er deshalb mit Anzeige
+        # gestartet - aber nur, wenn Tachyon vorher wirklich ausgestiegen ist.
+        # Ein Bild zu verlieren waere der schlechtere Handel als ein Fenster,
+        # das kurz aufgeht.
+        ("Transparenz, Fensterbild", dict(ao=0, opaque=0, snapshot=1,
+                                          headless=0)),
+        ("opak", dict(ao=0, opaque=1, snapshot=0, headless=hl))]
     made = {}
 
     if not no_vmd:
@@ -284,18 +310,25 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
             if not todo:
                 break
             if label != passes[0][0] and verbose:
-                print(f"    Zweiter Anlauf fuer {', '.join(todo)}: {label}")
+                extra = (" (mit Fenster, anders geht der Mitschnitt nicht)"
+                         if headless and opt["snapshot"] else "")
+                print(f"    Zweiter Anlauf fuer {', '.join(todo)}: "
+                      f"{label}{extra}")
+            # Zeitmarke vor dem Lauf: eine TGA aus einem frueheren, abgestuerzten
+            # Durchgang liegt sonst noch da und wuerde als Erfolg gezaehlt.
+            t0 = time.time() - 1.0
             rc, used = run_vmd(vmd, outdir, prefix, todo, w, h,
                                    opt["ao"], opt["opaque"], label,
                                    shadows=1 if shadows else 0,
                                    snapshot=opt["snapshot"], scene=scene,
-                                   verbose=verbose)
+                                   headless=opt["headless"], verbose=verbose)
             # Der Renderer des ERSTEN Durchgangs steht im Protokoll; womit eine
             # nachgeholte Ansicht entstanden ist, sagt ihre eigene Zeile.
             if label == passes[0][0]:
                 renderer = used
             for v in todo:
-                if os.path.exists(os.path.join(outdir, f"{prefix}_{v}.tga")):
+                tga = os.path.join(outdir, f"{prefix}_{v}.tga")
+                if os.path.exists(tga) and os.path.getmtime(tga) >= t0:
                     made[v] = label
             missing = [v for v in VIEWS if v not in made]
             if missing and label == passes[-1][0]:
@@ -349,6 +382,11 @@ def main(argv=None):
     p.add_argument("--keep-tga", action="store_true")
     p.add_argument("--dpi", type=int, default=300, help="Aufloesung der Skala")
     p.add_argument("--outdir", default="images")
+    p.add_argument("--headless", action="store_true",
+                   help="VMD ohne Fenster starten (-dispdev text). Tachyon "
+                        "rendert weiter, der Fenstermitschnitt nicht - er wird "
+                        "nur noch geholt, wenn Tachyon eine Ansicht nicht "
+                        "schafft.")
     p.add_argument("--scene", default="esp.tcl",
                    help="Szenendatei im Molekuelordner (Standard esp.tcl; "
                         "der Selbsttest benutzt esp_check.tcl)")
@@ -370,7 +408,8 @@ def main(argv=None):
 
     render_all(outdir=args.outdir, vmd=args.vmd, res=args.res,
                ao=args.ao, shadows=args.shadows, scene=args.scene,
-               keep_tga=args.keep_tga, dpi=args.dpi, no_vmd=args.no_vmd)
+               headless=args.headless, keep_tga=args.keep_tga,
+               dpi=args.dpi, no_vmd=args.no_vmd)
     return 0
 
 

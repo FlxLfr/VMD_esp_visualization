@@ -17,6 +17,8 @@
 #   set ESP_VIEWS  {sigma}       nur einzelne Ansichten
 #   set ESP_SNAPSHOT 1           Fenstermitschnitt statt Strahlverfolgung
 #   set ESP_SCENE  esp_check.tcl andere Szenendatei (Selbsttest)
+#   set ESP_OUTDIR images_check   anderer Zielordner (Selbsttest)
+#   set ESP_PREFIX brombenzol     Dateipraefix (Standard: Ordnername)
 # ==============================================================
 
 if {![info exists ESP_RES]}    { set ESP_RES {1600 1280} }
@@ -29,6 +31,16 @@ if {![info exists ESP_SNAPSHOT]} { set ESP_SNAPSHOT 0 }
 # Der Selbsttest schreibt seine Szene als esp_check.tcl, damit er die
 # committete esp.tcl eines echten Laufs nicht ueberschreibt.
 if {![info exists ESP_SCENE]}  { set ESP_SCENE esp.tcl }
+# Zielordner und Praefix kommen von render_espVMD.py. Stehen sie nicht da,
+# gelten dieselben Vorgaben wie beim Aufruf von Hand: images/ und der Name des
+# Molekuelordners.
+if {![info exists ESP_OUTDIR]} { set ESP_OUTDIR images }
+if {![info exists ESP_PREFIX]} { set ESP_PREFIX [file tail [pwd]] }
+# Ohne Fenster (-dispdev text) gibt es kein Display: "display resize" und der
+# GLSL-Rendermodus laufen ins Leere, und die Bildgroesse kommt stattdessen von
+# "-size" auf der Kommandozeile. Tachyon rendert trotzdem - er zeichnet aus dem
+# Szenengraphen, nicht aus dem OpenGL-Puffer.
+if {![info exists ESP_HEADLESS]} { set ESP_HEADLESS 0 }
 
 if {![file exists $ESP_SCENE]} {
     puts "render_esp.tcl: $ESP_SCENE nicht gefunden."
@@ -66,13 +78,21 @@ if {$ESP_AO} {
 }
 _try display antialias on
 _try display depthcue off
-_try display resize [lindex $ESP_RES 0] [lindex $ESP_RES 1]
-display update
+if {!$ESP_HEADLESS} {
+    _try display resize [lindex $ESP_RES 0] [lindex $ESP_RES 1]
+    display update
+}
 
 # TachyonInternal rendert in Fenstergroesse. Wenn der Bildschirm kleiner ist
 # als ESP_RES, klemmt Windows das Fenster ab und das Bild wird entsprechend
-# kleiner - deshalb wird die tatsaechliche Groesse gemeldet.
-puts "Fenster: [display get size]" ; flush stdout
+# kleiner - deshalb wird die tatsaechliche Groesse gemeldet. Ohne Fenster
+# entfaellt diese Deckelung: dort gilt "-size" und damit genau ESP_RES.
+if {$ESP_HEADLESS} {
+    puts "Fenster: [lindex $ESP_RES 0] [lindex $ESP_RES 1] (ohne Anzeige)"
+} else {
+    puts "Fenster: [display get size]"
+}
+flush stdout
 
 # Der Fenstermitschnitt ist der Notausgang fuer die Achsenansicht: Tachyon
 # steigt dort an der Zahl der durchquerten transparenten Lagen aus, OpenGL
@@ -84,6 +104,14 @@ puts "Fenster: [display get size]" ; flush stdout
 # Sonst: auf der GPU liefert der OptiX-Pfad dieselbe Szene schneller. Nicht
 # jeder Build hat ihn.
 set RENDERER TachyonInternal
+if {$ESP_SNAPSHOT && $ESP_HEADLESS} {
+    # Sollte nicht vorkommen - render_espVMD.py startet den Mitschnitt-
+    # Durchgang immer mit Anzeige. Wer das Skript von Hand aufruft, soll
+    # aber nicht ratlos vor einer leeren Datei stehen.
+    puts "! Fenstermitschnitt braucht eine Anzeige - ohne Fenster nicht"
+    puts "  moeglich. Es wird strahlverfolgt."
+    set ESP_SNAPSHOT 0
+}
 if {$ESP_SNAPSHOT} {
     set RENDERER snapshot
 } elseif {[lsearch [render list] TachyonLOptiXInternal] >= 0} {
@@ -92,15 +120,16 @@ if {$ESP_SNAPSHOT} {
 puts "Renderer: $RENDERER" ; flush stdout
 
 # --- Rendern --------------------------------------------------
-file mkdir images
-set prefix [file tail [pwd]]
+file mkdir $ESP_OUTDIR
+set prefix $ESP_PREFIX
+puts "Ziel: $ESP_OUTDIR" ; flush stdout
 
 # Jede Ansicht einzeln absichern: bricht eine ab - Tachyon kann bei grossen
 # Isoflaechen mit Umgebungsverdeckung aussteigen -, sollen die anderen trotzdem
 # entstehen. Und nach jeder Zeile flush, damit im Log steht, wie weit VMD kam,
 # falls der Prozess mittendrin stirbt.
 foreach view $ESP_VIEWS {
-    set out [file join images "${prefix}_${view}.tga"]
+    set out [file join $ESP_OUTDIR "${prefix}_${view}.tga"]
     puts "== $view: beginne ==" ; flush stdout
     if {[catch {esp_view $view ; display update} err]} {
         puts "! $view: Ansicht fehlgeschlagen: $err" ; flush stdout

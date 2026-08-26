@@ -181,19 +181,40 @@ Without `--root` it runs on `reference/` instead — that is the smoke test, see
 
 **It analyses first and renders once.** V_S,min and V_S,max come out of the cube
 files, so no rendering is needed to find them: the script collects the values of
-all molecules, fixes the common colour scale from them, then renders a single
-pass. The PyMOL pipeline renders twice for this (`--two-pass`); in VMD each
-image costs a minute or two and the first set would be thrown away anyway.
+all molecules first, then renders a single pass.
+
+**No second pass — a recommendation instead.** Images are only comparable on one
+shared scale, and the PyMOL pipeline renders twice to get there (`--two-pass`).
+In VMD an image costs a minute or two, so the first set would be waste. Every
+run therefore ends with the smallest scale that covers all molecules, and the
+ready-made command line to render with it:
+
+```
+Jedes Molekuel hat seine eigene Skala - 0.0350, 0.0500, 0.0700 a.u.
+Nebeneinanderlegen darf man die Bilder so NICHT.
+Kleinster Wert, der alle abdeckt: +/- 0.0700 a.u.
+Zum Rendern eines vergleichbaren Satzes:
+
+    python run_allVMD.py --root ../sandbox --esp-range 0.0700
+```
+
+You read it, decide what the figure should show, and start the run that counts —
+the smallest scale that clips nothing is not always the most informative one. A
+single molecule with a very negative oxygen flattens the contrast of every other
+molecule in the set, and that is a judgement call, not something the script
+should make for you. Set a fixed value that is too small and the run says so:
+which molecules it clips, and what they would need.
 
 | | |
 |---|---|
-| `--esp-range common` | one scale for all molecules (default) |
-| `--esp-range auto` | each molecule on its own scale |
-| `--esp-range 0.035` | fixed value — use the PyMOL number to compare directly |
+| `--esp-range auto` | each molecule on its own scale (default) |
+| `--esp-range 0.035` | fixed value — this is what you pass on the second run, and what the PyMOL `summary.csv` value goes into for a direct comparison |
+| `--esp-range common` | one scale for all, taken straight from this run — the recommendation applied without asking |
 | `--only NAME…` | restrict to these folders, wildcards allowed |
 | `--stride`, `--struct-unit`, `--force-convert` | conversion, as in the single-molecule script |
 | `--iso`, `--opacity`, `--scale`, `--fill`, `--color-scale` | scene |
-| `--res`, `--no-ao`, `--shadows`, `--keep-tga`, `--dpi`, `--vmd` | rendering |
+| `--headless` | no VMD window (see below) |
+| `--res`, `--ao`, `--shadows`, `--keep-tga`, `--dpi`, `--vmd` | rendering |
 | `--no-render` | convert and write `esp.tcl` only |
 | `--images-dir`, `--summary` | output locations |
 
@@ -217,9 +238,23 @@ images/<molecule>_pi.png  _edge.png  _sigma.png  _colorbar.png  _settings.txt
 ```
 
 The same five files the PyMOL pipeline produces, deliberately: only then can the
-two sets be laid side by side. Options: `--res 2400x1920`, `--no-ao` (faster,
-flatter), `--no-vmd` (only convert and build the bar), `--vmd <path>` if VMD is
+two sets be laid side by side. Options: `--res 2400x1920`, `--ao` (slower,
+deeper), `--no-vmd` (only convert and build the bar), `--vmd <path>` if VMD is
 not on the `PATH`.
+
+**`--headless` keeps the window shut.** VMD normally opens its OpenGL window for
+every pass, which over nine molecules is a dozen windows stealing focus.
+`--headless` starts it with `-dispdev text`: no window, no OpenGL. Tachyon still
+renders — it works from the scene graph, not from the framebuffer — and the
+image size then comes from `-size` on the command line rather than
+`display resize`, so it is no longer capped by your screen. On a 1061-pixel-tall
+screen, `--res 1600x1280` finally gives 1280.
+
+The one thing that genuinely needs the window is the snapshot fallback, which
+copies the OpenGL buffer. So `--headless` does not remove it, it only defers it:
+the window appears solely when Tachyon has failed on a view and the alternative
+would be losing that image. On the current data that happens for roughly a third
+of the views.
 
 **The colour bar comes from matplotlib, not from VMD** — and not from PyMOL
 either. Neither program has a legend object, so both pipelines draw it the same

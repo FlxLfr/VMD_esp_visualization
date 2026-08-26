@@ -306,6 +306,26 @@ def read_cube(path):
     return values.reshape(dims)
 
 
+def read_cube_atoms(path):
+    """Atomblock eines Cubes -> [(Z, x, y, z), ...], Laengen in Bohr.
+
+    Der Cube traegt die Atome selbst - deshalb laesst sich die Orientierung
+    auch mit --tcl-only bestimmen, ohne die Strukturdatei wiederzufinden.
+    """
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        fh.readline()
+        fh.readline()
+        natoms = abs(int(fh.readline().split()[0]))
+        for _ in range(3):
+            fh.readline()
+        atoms = []
+        for _ in range(natoms):
+            p = fh.readline().split()
+            # Spalte 1 Ordnungszahl, Spalte 2 Kernladung, dann x y z
+            atoms.append((int(p[0]), float(p[2]), float(p[3]), float(p[4])))
+    return atoms
+
+
 def read_stats(cube_path):
     """Kennzahlen aus der ersten Zeile eines frueher geschriebenen Cubes."""
     with open(cube_path, "r", encoding="utf-8", errors="replace") as fh:
@@ -317,11 +337,162 @@ def read_stats(cube_path):
 
 
 # ----------------------------------------------------------------------------
+# Orientierung der drei Ansichten
+#
+# Diese Rechnung ist aus der PyMOL-Pipeline uebernommen (render_esp.py,
+# molecular_frame/view_matrix) und liefert absichtlich dieselben Achsen: nur
+# dann zeigen beide Bildersaetze dasselbe und der Vergleich misst den Viewer.
+#
+# Vorher stand die Orientierung als feste Drehung im Tcl-Template - "pi, dann
+# rotate x by -90". Das setzt voraus, dass das Molekuel planar in der xy-Ebene
+# liegt und die C-X-Achse nach -y zeigt. Fuer die Halogenbenzole, wie Turbomole
+# sie ablegt, stimmte das zufaellig. Fuer die substituierten Pyridine nicht:
+# dort blickte die sigma-Ansicht am Loch vorbei. Auffallen tut das kaum, weil
+# in jeder Richtung eine runde, eingefaerbte Flaeche zu sehen ist - man haelt
+# die Gegenseite fuer das sigma-Loch.
+# ----------------------------------------------------------------------------
+
+HALOGENS = {9: "F", 17: "Cl", 35: "Br", 53: "I"}
+
+
+def molecular_frame(atoms, halogen_index=None):
+    """Reproduzierbares Molekuelkoordinatensystem aus der Geometrie.
+
+    Rueckgabe: (normal, axis, sigma_axis, label)
+      normal      Flaechennormale: Hauptachse der kleinsten Ausdehnung ueber
+                  die Schweratome (Wasserstoff wackelt und traegt nichts bei)
+      axis        die IN DIE EBENE PROJIZIERTE C->Halogen-Achse; sie spannt mit
+                  normal ein Rechtssystem auf und richtet pi und edge aus
+      sigma_axis  die ECHTE, unprojizierte C->Halogen-Achse
+      label       woher die Achse kommt, fuer die Meldung im Skript
+
+    Warum zwei Achsen: bei planaren Molekuelen sind sie identisch und die
+    Projektion ist Rundungskosmetik. Steht die C-X-Bindung aus der
+    Ausgleichsebene heraus, dreht sie die Achse aber wirklich weg - und die
+    sigma-Ansicht blickte um genau diesen Winkel am Loch vorbei.
+
+    Ohne Halogen gibt es kein sigma-Loch. Dann nimmt die Achse die groesste
+    Traegheitsausdehnung, also die Laengsachse; die sigma-Ansicht ist dort der
+    Blick von der Schmalseite und keine Aussage ueber ein Loch.
+    """
+    coords = np.array([[a[1], a[2], a[3]] for a in atoms], dtype=float)
+    znums = np.array([a[0] for a in atoms])
+
+    heavy = coords[znums > 1]
+    if len(heavy) < 3:
+        heavy = coords
+    _, _, vt = np.linalg.svd(heavy - heavy.mean(axis=0), full_matrices=False)
+    normal = vt[2]                                  # kleinste Ausdehnung
+    long_axis = vt[0]                               # groesste Ausdehnung
+
+    axis, label = None, "laengste Traegheitsachse (kein Halogen)"
+    hal_idx = [i for i, z in enumerate(znums) if z in HALOGENS]
+    if hal_idx:
+        hi = halogen_index if halogen_index in hal_idx else hal_idx[0]
+        carbons = [i for i, z in enumerate(znums) if z == 6]
+        if carbons:
+            d = np.linalg.norm(coords[carbons] - coords[hi], axis=1)
+            ci = carbons[int(np.argmin(d))]
+            axis = coords[hi] - coords[ci]          # C -> X, zeigt zum Loch
+            label = (f"C{ci + 1}->{HALOGENS[int(znums[hi])]}{hi + 1}")
+
+    if axis is None:
+        axis = long_axis.copy()
+
+    axis = axis / np.linalg.norm(axis)
+    normal = normal / np.linalg.norm(normal)
+    sigma_axis = axis.copy()
+
+    axis = axis - normal * float(np.dot(axis, normal))
+    if np.linalg.norm(axis) < 1e-6:                 # C-X steht senkrecht
+        axis = long_axis
+    axis = axis / np.linalg.norm(axis)
+
+    return normal, axis, sigma_axis, label
+
+
+def view_matrix(forward, up):
+    """Rotationsmatrix fuer VMDs ``rotate_matrix``.
+
+    ``forward`` zeigt vom Molekuel zur Kamera, ``up`` nach oben im Bild.
+
+    VMD rechnet Bildkoordinaten als R * (Welt - Zentrum). Damit die Kamera
+    entlang forward blickt, muss R genau diesen Vektor auf +z abbilden - die
+    ZEILEN von R sind also die Kamerabasis. (PyMOLs set_view will dieselbe
+    Matrix transponiert; deshalb steht dort ein .T und hier keines.)
+    """
+    z = np.asarray(forward, dtype=float)
+    z = z / np.linalg.norm(z)
+    up = np.asarray(up, dtype=float)
+    up = up - z * float(np.dot(up, z))
+    if np.linalg.norm(up) < 1e-8:                   # up parallel zu forward
+        alt = np.array([0.0, 0.0, 1.0])
+        if abs(float(np.dot(alt, z))) > 0.9:
+            alt = np.array([1.0, 0.0, 0.0])
+        up = alt - z * float(np.dot(alt, z))
+    up = up / np.linalg.norm(up)
+    right = np.cross(up, z)
+    right = right / np.linalg.norm(right)
+    return np.array([right, up, z])
+
+
+def tcl_matrix(m):
+    """3x3-Rotation -> 4x4-Matrix als Tcl-Liste, wie molinfo sie erwartet."""
+    rows = []
+    for i in range(3):
+        rows.append("{%s 0.000000}" % " ".join(f"{v:.6f}" for v in m[i]))
+    rows.append("{0.000000 0.000000 0.000000 1.000000}")
+    return "{%s}" % " ".join(rows)
+
+
+# Fallback ohne Atome: genau die Achsen, die die frueheren festen Drehungen
+# ergaben (pi = Blick aus +z, edge = rotate y by 90, sigma = rotate x by -90).
+# So aendert sich nichts, wenn die Geometrie ausnahmsweise fehlt.
+_FALLBACK = {
+    "pi":    ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
+    "edge":  ((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+    "sigma": ((0.0, -1.0, 0.0), (0.0, 0.0, 1.0)),
+}
+
+
+def view_matrices(atoms):
+    """Die drei Ansichten als Tcl-Matrizen plus eine Notiz zur sigma-Achse."""
+    if not atoms:
+        mats = {k: view_matrix(f, u) for k, (f, u) in _FALLBACK.items()}
+        return {k: tcl_matrix(m) for k, m in mats.items()}, \
+               "Weltachsen (keine Geometrie gefunden)", None
+
+    normal, axis, sigma_axis, label = molecular_frame(atoms)
+    mats = {
+        # Blick senkrecht auf die Ebene, C-X-Achse zeigt nach unten
+        "pi":    view_matrix(forward=normal, up=-axis),
+        # Blick in der Ebene, senkrecht zur C-X-Achse; C-X-Achse waagerecht
+        "edge":  view_matrix(forward=np.cross(normal, axis), up=normal),
+        # Blick von aussen entlang der ECHTEN C-X-Achse auf das sigma-Loch
+        "sigma": view_matrix(forward=sigma_axis, up=normal),
+    }
+    # Neigung der C-X-Achse gegen die Ausgleichsebene: ist sie gross, laufen
+    # sigma und pi/edge auseinander, und das sollte im Protokoll stehen.
+    tilt = abs(90.0 - math.degrees(math.acos(
+        min(1.0, abs(float(np.dot(sigma_axis, normal)))))))
+    return {k: tcl_matrix(m) for k, m in mats.items()}, label, tilt
+
+
+# ----------------------------------------------------------------------------
 # Cube schreiben
 # ----------------------------------------------------------------------------
 
 def write_cube(path, info, data, atoms, stride=1, comment=""):
-    """Gaussian-Cube, alle Laengen in Bohr."""
+    """Gaussian-Cube, alle Laengen in Bohr.
+
+    Geschrieben wird erst nach <name>.part und am Ende umbenannt. Ein voller
+    Cube ist 200 MB und braucht Minuten; wird der Lauf in dieser Zeit
+    abgebrochen - Strg-C, geschlossenes Fenster, volle Platte -, bliebe sonst
+    eine halbe Datei mit gueltigem Kopf liegen. Der naechste Lauf haelt die fuer
+    fertig, ueberspringt die Konvertierung und rendert eine Isoflaeche mit
+    fehlender hinterer Haelfte. Das Umbenennen ist der Moment, in dem die Datei
+    entsteht - vorher gibt es sie unter ihrem Namen nicht.
+    """
     if stride > 1:
         data = data[::stride, ::stride, ::stride]
     n = data.shape
@@ -330,7 +501,8 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
     origin = info["origin"] + sum(starts[i] * vecs[i] for i in range(3))
     voxel = [info["grid"][i][1] * stride * vecs[i] for i in range(3)]
 
-    with open(path, "w", encoding="utf-8") as fh:
+    tmp = path + ".part"
+    with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(f"{comment or 'erzeugt mit xyzToCubeToVMDVis.py'}\n")
         fh.write(f"{info.get('quantity') or 'volumetric data'} | "
                  f"{info.get('title', '')} | Einheiten: Bohr\n")
@@ -358,6 +530,10 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
                 fh.write("".join(buf))
                 buf.clear()
         fh.write("".join(buf))
+    # Erst hier existiert <name>.cube. os.replace ersetzt auch eine vorhandene
+    # Datei und ist auf einem Dateisystem unteilbar - es gibt keinen Moment, in
+    # dem der alte Cube weg und der neue noch nicht da ist.
+    os.replace(tmp, path)
     return n
 
 
@@ -367,7 +543,7 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
 
 def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
                      opacity=0.50, scale="auto", fill=0.85, colorscale="RWB",
-                     sources=""):
+                     sources="", atoms=None):
     """Fuellt esp_template.tcl.
 
     Ueber @@PLATZHALTER@@ statt str.format oder string.Template: Tcl benutzt
@@ -385,6 +561,24 @@ def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
         note = (f"\\nV_S,min = {stats[0]:+.5f}   V_S,max = {stats[1]:+.5f} a.u. "
                 f"(Gitterpunkte auf der Schale)")
 
+    # Orientierung aus der Geometrie. Ohne uebergebene Atome aus dem Cube
+    # lesen - der traegt sie, auch bei --tcl-only.
+    if atoms is None:
+        try:
+            atoms = read_cube_atoms(
+                os.path.join(os.path.dirname(os.path.abspath(path)), rho_cube))
+        except Exception as err:
+            print(f"  ! Atome nicht lesbar ({err}) - Ansichten auf Weltachsen",
+                  file=sys.stderr)
+            atoms = None
+    rot, axis_label, tilt = view_matrices(atoms)
+    axis_note = f"\\nsigma-Achse: {axis_label}"
+    if tilt is not None and tilt > 15.0:
+        # Steht die Bindung schraeg, folgen pi/edge der Ebene und sigma der
+        # Bindung - dann sind es nicht mehr drei Ansichten desselben Rahmens.
+        axis_note += (f" ({tilt:.0f} Grad aus der Ausgleichsebene; "
+                      f"pi/edge folgen der Ebene)")
+
     for key, value in {
         "@@STAMP@@": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "@@SOURCES@@": sources,
@@ -401,7 +595,11 @@ def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
         "@@SCALE@@": scale if scale == "auto" else f"{scale:g}",
         "@@FILL@@": f"{fill:g}",
         "@@COLORSCALE@@": colorscale,
-        "@@STATS@@": note,
+        "@@STATS@@": note + axis_note,
+        "@@ROT_PI@@": rot["pi"],
+        "@@ROT_EDGE@@": rot["edge"],
+        "@@ROT_SIGMA@@": rot["sigma"],
+        "@@AXIS_LABEL@@": axis_label,
     }.items():
         text = text.replace(key, value)
 

@@ -119,20 +119,37 @@ proc esp_center {} {
     esp_fit
 }
 
-# Annahme: planares Molekuel in der xy-Ebene, Halogen bei y = 0, Ring bei y > 0
-# (so legt die Turbomole-Optimierung die Halogenbenzole ab). Der Drehsinn bei
-# sigma ist nicht beliebig - falsch herum zeigt das Bild die Gegenseite, und
-# weil dort ebenfalls eine runde gefaerbte Flaeche sitzt, faellt das nicht auf.
+# Die drei Ansichten stehen als fertige Rotationsmatrizen hier drin.
+# xyzToCubeToVMDVis.py hat sie aus der Geometrie gerechnet: Ringnormale fuer
+# pi, die echte Kohlenstoff-Halogen-Achse fuer sigma - dieselbe Rechnung wie in
+# der PyMOL-Pipeline, damit beide Bildersaetze wirklich dasselbe zeigen.
+#
+# Frueher stand hier "pi, dann rotate x by -90". Das setzte voraus, dass das
+# Molekuel planar in der xy-Ebene liegt und die C-X-Achse nach -y zeigt. Fuer
+# die Halogenbenzole aus Turbomole stimmte das; fuer die substituierten
+# Pyridine nicht, dort blickte sigma am Loch vorbei. Gemerkt haette man es
+# fast nicht: in jeder Richtung sitzt eine runde eingefaerbte Flaeche, und die
+# Gegenseite sieht aus wie ein sigma-Loch.
+#
+# sigma-Achse dieses Molekuels: @@AXIS_LABEL@@
+set ROT_PI    @@ROT_PI@@
+set ROT_EDGE  @@ROT_EDGE@@
+set ROT_SIGMA @@ROT_SIGMA@@
+
 proc esp_view {which} {
+    global espmol ROT_PI ROT_EDGE ROT_SIGMA
     esp_center
     switch -- $which {
-        pi      { }
-        edge    { rotate y by 90 }
-        sigma   { rotate x by -90
-                  puts "Hinweis: in der Achsenansicht stapeln sich die"
-                  puts "  transparenten Lagen - esp_opacity 1.0 oder"
-                  puts "  esp_snapshot (Tachyon) gibt ein sauberes Bild." }
+        pi      { set m $ROT_PI }
+        edge    { set m $ROT_EDGE }
+        sigma   { set m $ROT_SIGMA }
         default { puts "esp_view: pi | edge | sigma" ; return }
+    }
+    molinfo $espmol set rotate_matrix [list $m]
+    if {$which eq "sigma"} {
+        puts "Hinweis: in der Achsenansicht stapeln sich die"
+        puts "  transparenten Lagen - esp_opacity 1.0 oder"
+        puts "  esp_snapshot (Tachyon) gibt ein sauberes Bild."
     }
     puts "Ansicht: $which"
 }

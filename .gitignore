@@ -6,6 +6,7 @@
 # and these are all regenerable from the raw data with xyzToCube.py.
 # ---------------------------------------------------------------------------
 *.cube
+*.cube.part
 *.dx
 td.xyz
 tp.xyz

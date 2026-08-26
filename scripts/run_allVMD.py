@@ -26,17 +26,22 @@ plus einer Strukturdatei (.mol, .sdf oder .xyz).
 Ablauf: erst analysieren, dann EINMAL rendern
 --------------------------------------------
 V_S,min und V_S,max stehen in den Cube-Dateien, dafuer muss nichts gerendert
-werden. Das Skript sammelt also zuerst die Kennzahlen aller Molekuele, legt
-daraus die gemeinsame Farbskala fest und rendert danach genau einen Durchgang.
-Die PyMOL-Pipeline rendert dafuer zweimal (--two-pass); in VMD kostet jedes
-Bild ein bis zwei Minuten, und der erste Satz waere ohnehin Ausschuss.
+werden. Das Skript sammelt also zuerst die Kennzahlen aller Molekuele und
+rendert danach genau einen Durchgang.
 
-    --esp-range common   gemeinsame Skala aus allen Molekuelen (Standard)
-    --esp-range auto     jedes Molekuel auf seiner eigenen Skala
+    --esp-range auto     jedes Molekuel auf seiner eigenen Skala (Standard)
     --esp-range 0.035    fester Wert
+    --esp-range common   gemeinsame Skala, sofort aus diesem Lauf
 
-Vergleichbar sind die Bilder nur mit einer gemeinsamen Skala. Fuer den direkten
-Vergleich mit der PyMOL-Pipeline den Wert aus deren summary.csv uebernehmen.
+Vergleichbar sind die Bilder nur mit EINER Skala fuer alle. Dafuer rendert die
+PyMOL-Pipeline zweimal (--two-pass) - hier nicht: am Ende jedes Laufs steht der
+kleinste Wert, der alle Molekuele abdeckt, samt fertiger Befehlszeile in der
+Konsole. Man liest ihn, entscheidet selbst, welche Skala das Bild zeigen soll,
+und startet den Lauf, der zaehlt. Ein Bild kostet in VMD ein bis zwei Minuten;
+ein automatischer erster Satz waere Ausschuss.
+
+Fuer den direkten Vergleich mit der PyMOL-Pipeline den Wert aus deren
+summary.csv uebernehmen.
 
 Nicht enthalten
 ---------------
@@ -183,7 +188,7 @@ FIELDS = ["molecule", "structure", "grid", "iso_au", "shell_points",
           "resolution_px", "renderer", "ambient_occlusion", "shadows", "views"]
 
 
-def write_summary(path, rows, common=None):
+def write_summary(path, rows, common=None, advice=None):
     with open(path, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=FIELDS)
         w.writeheader()
@@ -218,6 +223,83 @@ def write_summary(path, rows, common=None):
         if common is not None:
             fh.write(f"# gemeinsame Farbskala fuer alle Molekuele: "
                      f"+/- {common:.4f} a.u.\n")
+        if advice is not None:
+            # Auch in der Datei, nicht nur in der Konsole: wer die CSV spaeter
+            # wieder aufmacht, sieht sonst nicht, dass die Bilder auf
+            # verschiedenen Skalen liegen und was ein gemeinsamer Satz kostet.
+            fh.write(f"# jedes Molekuel auf seiner eigenen Skala; ein "
+                     f"vergleichbarer Satz braucht --esp-range "
+                     f"{advice:.4f}\n")
+
+
+# ----------------------------------------------------------------------------
+# Empfehlung fuer den naechsten Lauf
+# ----------------------------------------------------------------------------
+
+def again_with(raw_argv, value):
+    """Derselbe Aufruf noch einmal, nur mit festem --esp-range."""
+    keep, skip = [], False
+    for a in raw_argv:
+        if skip:
+            skip = False
+            continue
+        if a == "--esp-range":
+            skip = True
+            continue
+        if a.startswith("--esp-range="):
+            continue
+        if a == "--no-render":
+            # Der Vorschlag zielt auf einen Bildersatz - ihn mit --no-render
+            # anzubieten waere die eine Zeile, die garantiert nichts rendert.
+            continue
+        keep.append(f'"{a}"' if " " in a else a)
+    return " ".join(["python run_allVMD.py"] + keep
+                    + [f"--esp-range {value:.4f}"])
+
+
+def advise(mode, common, needed, rows, raw_argv):
+    """Sagen, welche Skala einen vergleichbaren Satz ergaebe - und wie man sie setzt.
+
+    Statt eines zweiten Renderdurchgangs (so macht es die PyMOL-Pipeline mit
+    --two-pass) steht hier nur der Vorschlag. Welche Skala vernuenftig ist,
+    haengt davon ab, was das Bild zeigen soll: die kleinste, die nichts
+    abschneidet, ist selten die aussagekraeftigste - ein Molekuel mit einem
+    sehr negativen Sauerstoff drueckt sonst allen anderen die Kontraste flach.
+    Diese Entscheidung gehoert dem Anwender, nicht dem Skript.
+    """
+    if needed is None:
+        return
+    used = sorted({r["rng"] for r in rows})
+    print()
+    print("-" * 70)
+    if mode == "auto":
+        if len(used) == 1:
+            print(f"Alle Molekuele sind ohnehin auf +/- {used[0]:.4f} a.u. "
+                  f"gelandet -")
+            print("die Bilder sind also schon vergleichbar. Zum Festschreiben:")
+        else:
+            print("Jedes Molekuel hat seine eigene Skala - "
+                  f"{', '.join(f'{v:.4f}' for v in used)} a.u.")
+            print("Nebeneinanderlegen darf man die Bilder so NICHT.")
+            print(f"Kleinster Wert, der alle abdeckt: +/- {needed:.4f} a.u.")
+            print("Zum Rendern eines vergleichbaren Satzes:")
+        print()
+        print(f"    {again_with(raw_argv, needed)}")
+    elif common is not None and common + 1e-12 < needed:
+        low = [r["prefix"] for r in rows
+               if r["stats"] and r["stats"][2] > common + 1e-12]
+        print(f"! Die feste Skala +/- {common:.4f} a.u. schneidet ab.")
+        print(f"  {', '.join(low)} braucht bis +/- {needed:.4f} a.u.; "
+              f"alles darueber")
+        print("  laeuft in die Saettigung und ist im Bild nicht mehr "
+              "unterscheidbar.")
+        print("  Absichtlich? Dann ist alles gut. Sonst:")
+        print()
+        print(f"    {again_with(raw_argv, needed)}")
+    else:
+        print(f"Skala +/- {common:.4f} a.u. deckt alle Molekuele ab "
+              f"(noetig waeren +/- {needed:.4f}).")
+    print("-" * 70)
 
 
 # ----------------------------------------------------------------------------
@@ -245,10 +327,11 @@ def main(argv=None):
                    help="Cubes neu schreiben, auch wenn sie schon da sind")
 
     g = p.add_argument_group("Szene")
-    g.add_argument("--esp-range", default="common",
-                   help="'common' (Standard, gemeinsame Skala aus allen "
-                        "Molekuelen), 'auto' (jedes fuer sich) oder ein fester "
-                        "Wert in a.u.")
+    g.add_argument("--esp-range", default="auto",
+                   help="'auto' (Standard, jedes Molekuel auf seiner eigenen "
+                        "Skala), ein fester Wert in a.u. - am Ende jedes Laufs "
+                        "steht ein Vorschlag dafuer in der Konsole - oder "
+                        "'common' (gemeinsame Skala, sofort aus diesem Lauf)")
     g.add_argument("--iso", type=float, default=0.001, help="Isowert in a.u.")
     g.add_argument("--opacity", type=float, default=0.50,
                    help="Deckkraft der Isoflaeche 0..1")
@@ -271,6 +354,12 @@ def main(argv=None):
     g.add_argument("--shadows", action="store_true",
                    help="Schlagschatten an (Standard aus - sie werfen die "
                         "Staebchen als graue Kapseln auf die Isoflaeche)")
+    g.add_argument("--headless", action="store_true",
+                   help="VMD ohne Fenster starten (-dispdev text). Bei neun "
+                        "Molekuelen spart das ein gutes Dutzend aufpoppender "
+                        "Fenster. Tachyon rendert ohne Anzeige weiter; nur der "
+                        "Fenstermitschnitt braucht sie und wird deshalb nur "
+                        "noch geholt, wenn Tachyon eine Ansicht nicht schafft.")
     g.add_argument("--keep-tga", action="store_true")
     g.add_argument("--dpi", type=int, default=300, help="Aufloesung der Skala")
     g.add_argument("--images-dir", default=None,
@@ -279,6 +368,8 @@ def main(argv=None):
     g.add_argument("--summary", default=None,
                    help="Pfad der CSV (Standard: <root>/summary.csv)")
     args = p.parse_args(argv)
+    # Fuer die Empfehlung am Ende: derselbe Aufruf, nur mit anderer Skala.
+    raw_argv = list(sys.argv[1:]) if argv is None else list(argv)
 
     # Der Selbsttest darf nichts Committetes ueberschreiben: eigene Bildordner,
     # eigene Szenendatei, eigene CSV. Sonst laesst sich hinterher nicht mehr
@@ -337,19 +428,29 @@ def main(argv=None):
             print("    ! keine Schale gefunden - Kennzahlen fehlen")
 
     # --- Farbskala festlegen ------------------------------------------------
+    # needed = die Skala, die ALLE Molekuele dieses Laufs abdeckt. Sie wird
+    # immer berechnet, auch im Modus auto: aus ihr entsteht die Empfehlung am
+    # Ende. Deshalb braucht dieses Skript keinen zweiten Renderdurchgang -
+    # der Vorschlag steht in der Konsole, der Anwender entscheidet, und der
+    # naechste Aufruf mit --esp-range <wert> ist der Durchgang, der zaehlt.
     ranges = [e["stats"][2] for e in entries if e["stats"]]
-    common = max(ranges) if ranges else None
+    needed = max(ranges) if ranges else None
+    common = needed
     mode = str(args.esp_range).lower()
-    if mode == "common":
+    if mode == "auto":
+        print("\nFarbskala je Molekuel aus den eigenen Kennzahlen (auto)")
+    elif mode == "common":
         if common is None:
             raise SystemExit("Keine Kennzahlen - --esp-range braucht einen "
                              "festen Wert.")
         print(f"\nGemeinsame Farbskala: +/- {common:.4f} a.u. "
               f"(groesster Wert von {len(ranges)} Molekuel(en))")
-    elif mode == "auto":
-        print("\nFarbskala je Molekuel aus den eigenen Kennzahlen")
     else:
-        common = float(args.esp_range)
+        try:
+            common = float(args.esp_range)
+        except ValueError:
+            raise SystemExit(f"--esp-range: 'auto', 'common' oder eine Zahl, "
+                             f"nicht '{args.esp_range}'.")
         print(f"\nFeste Farbskala: +/- {common:.4f} a.u.")
 
     # --- Schritt 2: Szene und Bilder ---------------------------------------
@@ -397,7 +498,8 @@ def main(argv=None):
                     outdir=args.images_dir, prefix=name, iso=args.iso,
                     rng=rng, stats=e["stats"], vmd=args.vmd, res=args.res,
                     ao=args.ao, shadows=args.shadows, scene=scene_name,
-                    keep_tga=args.keep_tga, dpi=args.dpi, verbose=True)
+                    headless=args.headless, keep_tga=args.keep_tga,
+                    dpi=args.dpi, verbose=True)
             finally:
                 os.chdir(cwd)
             row.update(made=res["made"], size=res["size"],
@@ -406,7 +508,9 @@ def main(argv=None):
 
     summary = args.summary or os.path.join(
         args.root, "summary_check.csv" if is_reference else "summary.csv")
-    write_summary(summary, rows, common if mode != "auto" else None)
+    write_summary(summary, rows,
+                  common=None if mode == "auto" else common,
+                  advice=needed if mode == "auto" else None)
 
     # --- Abschluss ----------------------------------------------------------
     print("\n" + "-" * 70)
@@ -426,6 +530,7 @@ def main(argv=None):
     if is_reference:
         print("Vergleiche jetzt mit reference/summary.csv und "
               "reference/*/images/.")
+    advise(mode, common, needed, rows, raw_argv)
     return 0
 
 
