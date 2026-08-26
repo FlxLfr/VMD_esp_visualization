@@ -185,7 +185,7 @@ def ensure_cubes(entry, args):
 FIELDS = ["molecule", "structure", "grid", "iso_au", "shell_points",
           "VS_min_au", "VS_max_au", "VS_min_kJ", "VS_max_kJ",
           "esp_range_used_au", "esp_range_mode", "color_scale", "opacity",
-          "resolution_px", "renderer", "ambient_occlusion", "shadows", "views"]
+          "resolution_px", "renderer", "ambient_occlusion", "backgrounds", "views"]
 
 
 def write_summary(path, rows, common=None, advice=None):
@@ -213,7 +213,7 @@ def write_summary(path, rows, common=None, advice=None):
                                   if r.get("size") else ""),
                 "renderer": r.get("renderer", ""),
                 "ambient_occlusion": "on" if r["ao"] else "off",
-                "shadows": "on" if r["shadows"] else "off",
+                "backgrounds": " ".join(r["backgrounds"]),
                 # Pro Ansicht, womit sie tatsaechlich entstanden ist - bei
                 # einem Tachyon-Absturz greift der Fallback, und das darf im
                 # Protokoll nicht verschwinden.
@@ -357,9 +357,11 @@ def main(argv=None):
                         "Schatten in die Vertiefungen, saeumt dabei aber auch "
                         "die Staebchen als graue Doppelgaenger auf der "
                         "Isoflaeche. PyMOL rendert ebenfalls ohne.")
-    g.add_argument("--shadows", action="store_true",
-                   help="Schlagschatten an (Standard aus - sie werfen die "
-                        "Staebchen als graue Kapseln auf die Isoflaeche)")
+    g.add_argument("--backgrounds", nargs="+", default=["white"],
+                   metavar="FARBE",
+                   help="Hintergrundfarben, z.B. white black. Ab zwei Farben "
+                        "bekommen die Dateien einen Zusatz: "
+                        "<molekuel>_pi_black.png")
     g.add_argument("--headless", action="store_true",
                    help="VMD ohne Fenster starten (-dispdev text). Bei neun "
                         "Molekuelen spart das ein gutes Dutzend aufpoppender "
@@ -499,7 +501,7 @@ def main(argv=None):
         row = {"prefix": name, "struct": e["struct"], "grid": e["grid"],
                "stats": e["stats"], "rng": rng, "iso": args.iso, "mode": mode,
                "color_scale": args.color_scale, "opacity": args.opacity,
-               "ao": args.ao, "shadows": args.shadows,
+               "ao": args.ao, "backgrounds": args.backgrounds,
                "made": {}, "size": None, "renderer": ""}
 
         if not args.no_render:
@@ -511,9 +513,10 @@ def main(argv=None):
                 res = rend.render_all(
                     outdir=args.images_dir, prefix=name, iso=args.iso,
                     rng=rng, stats=e["stats"], vmd=args.vmd, res=args.res,
-                    ao=args.ao, shadows=args.shadows, scene=scene_name,
-                    headless=args.headless, rainbow=args.rainbow,
-                    keep_tga=args.keep_tga, dpi=args.dpi, verbose=True)
+                    ao=args.ao, backgrounds=args.backgrounds,
+                    scene=scene_name, headless=args.headless,
+                    rainbow=args.rainbow, keep_tga=args.keep_tga,
+                    dpi=args.dpi, verbose=True)
             finally:
                 os.chdir(cwd)
             row.update(made=res["made"], size=res["size"],

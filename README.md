@@ -53,7 +53,9 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 8. [Repository layout](#8-repository-layout)
 9. [What the PyMOL pipeline does and this one does not](#9-what-the-pymol-pipeline-does-and-this-one-does-not)
 
-
+Everything that is background rather than instruction — why a second pipeline
+exists at all, how the two viewers differ mechanically, the choice of VMD
+version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
 
 ---
 
@@ -64,18 +66,20 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 Download from the
 [TCBG test release page](https://www.ks.uiuc.edu/Research/vmd/alpha/) (free
 registration) and take **Version 1.9.4, "Windows 64-bit, CUDA, OptiX, OSPray"**.
-Version 2.0.0 exists as a monthly alpha and is deliberately not used here — see `docs/Details.docx`.
+The page labels it "Windows 10"; that is the tested minimum, not an upper limit,
+and it runs on Windows 11 natively. Version 2.0.0 exists as a monthly alpha and
+is deliberately not used here — see `docs/Details.docx`.
 
 VMD is not a conda package and the Windows installer does **not** put it on the
 `PATH`. The scripts find it anyway: they check the `PATH`, then the `VMDDIR`
 environment variable that the installer does set, then the usual install
 folders. Only if all three fail do you need `--vmd "C:\Program Files\VMD\vmd.exe"`
-or a `PATH` entry. The PowerShell snippet for that is in `docs/Details.docx`.
+or a `PATH` entry — the PowerShell snippet for that is in `docs/Details.docx`.
 
 ### 1.2 Create the environment
 
 This assumes a working conda; if you have none, follow §1.1 of the PyMOL
-project's README first.
+project's README first — it is the same installation.
 
 ```bash
 conda env create -f environment.yml
@@ -223,7 +227,7 @@ not from the file name. Expect a minute or two per grid.
 |---|---|---|
 | `--tcl-only` | off | rewrite `esp.tcl` from the existing cubes, touching no grid. Sub-second instead of minutes. |
 | `--no-vmd` | off | cubes only, no scene. |
-| `--esp-range` | `auto` | half-width of the colour scale in a.u., or `auto` derived from V_S,min/V_S,max on the shell. |
+| `--esp-range` | `auto` | half-width of the colour scale in a.u., or `auto` — derived from V_S,min/V_S,max on the shell. |
 | `--iso` | `0.001` | isovalue of the density surface drawn in the scene. |
 | `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
 | `--scale` | `auto` | zoom, a number or `auto` — from the molecule's size and the window height. |
@@ -253,6 +257,9 @@ python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --rainbow
 **Never re-run the conversion just to change the scene.** Converting takes
 minutes; `--tcl-only` reads the two cube headers, works out which is which and
 rewrites the scene in well under a second. `--struct` is not needed then.
+
+**On `--stride`.** Use `--stride 2` while exploring and for images; use full
+resolution whenever a value goes into a table.
 
 What the converter takes care of, which is where hand-rolled conversions usually
 go wrong:
@@ -347,7 +354,7 @@ principal axis instead; read the file name as "axial view" in that case.
 | `--res` | `1600x1280` | image size in px |
 | `--headless` | off | start VMD without a window (`-dispdev text`) — see below |
 | `--ao` | off | ambient occlusion: soft shadows in the recesses, slower |
-| `--shadows` | off | cast shadows. Off on purpose: they drop the sticks onto the isosurface as grey capsules that look like a data artefact. PyMOL renders without them too. |
+| `--backgrounds` | `white` | one or more background colours, e.g. `--backgrounds white black` renders each view once per colour |
 | `--keep-tga` | off | keep VMD's intermediate TGA files |
 | `--dpi` | `300` | resolution of the colour bar |
 | `--vmd` | autodetect | path to `vmd.exe` |
@@ -474,7 +481,8 @@ small and the run says so: which molecules it clips, and what they would need.
 | `--no-render` | off | convert and write the scene only |
 | `--headless` | off | start VMD without a window |
 | `--res` | `1600x1280` | passed through |
-| `--ao`, `--shadows`, `--keep-tga`, `--dpi`, `--vmd` | | passed through |
+| `--backgrounds` | `white` | one or more background colours, passed through |
+| `--ao`, `--keep-tga`, `--dpi`, `--vmd` | | passed through |
 | `--images-dir` | `images` (`images_check` for the built-in reference run) | output folder inside each molecule folder |
 | `--summary` | `<root>/summary.csv` | path of the CSV summary |
 
@@ -548,7 +556,8 @@ Per run, `run_allVMD.py` writes `summary.csv`:
 | `esp_range_used_au`, `esp_range_mode` | colour range and how it was chosen |
 | `color_scale`, `opacity` | scene settings |
 | `resolution_px`, `renderer` | image size and the renderer of the first pass |
-| `ambient_occlusion`, `shadows` | render settings |
+| `ambient_occlusion` | whether ambient occlusion was on |
+| `backgrounds` | the background colours rendered |
 | `views` | per view, which pass produced it, e.g. `pi:Transparenz;edge:Transparenz, Fensterbild` |
 
 Whatever colour range you choose, **state it in the figure caption** and ship
@@ -637,11 +646,47 @@ VMD_esp_visualization/
 └── sandbox/                      your own data and experiments, not tracked
 ```
 
+**Large files are deliberately not tracked.** `.gitignore` excludes `*.cube`,
+`*.dx` and the raw `td.xyz`/`tp.xyz` grids — a full-resolution cube is ~200 MB
+and GitHub rejects anything above 100 MB. Regenerate them with
+`xyzToCubeToVMDVis.py`. `esp.tcl` is generated too and is ignored inside molecule
+folders; only the scripts under `scripts/` are tracked.
+
+**`reference/` and `sandbox/` do different jobs.** `reference/` holds a
+known-good example and is committed; `sandbox/` is where your own molecules and
+the large raw data live, and git ignores it entirely. If a run goes wrong,
+`reference/` tells you whether the problem is your installation or your data. Its
+decimated grids are the one exception to the rule above and are tracked on
+purpose — that is what makes a fresh clone self-testing. Rebuild them, or make a
+set for another molecule, with:
+
+```bash
+python tools/make_reference.py sandbox/brombenzol --name brombenzol
+```
+
+It crops to the bounding box of the ρ > iso/2 region plus a margin, so the whole
+isosurface stays inside the grid, and then keeps every n-th point (`--stride`).
+It ships as raw `pointval` files rather than cubes on purpose: unit conversion
+and index reordering are the steps most likely to break, and ready-made cubes
+would skip exactly those.
+
+**The scene lives in its own file.** `esp_template.tcl` is real Tcl with
+`@@placeholder@@` markers that the Python script fills in, not a Python string —
+that keeps syntax highlighting and makes escaping mistakes visible.
+
+The name `xyzToCubeToVMDVis.py` is deliberately not `xyzToCube.py`: the PyMOL
+project has a script by that name with a different feature set, and two files
+with one name in two repositories is how the wrong one gets edited.
+
+---
 
 ## 9. What the PyMOL pipeline does and this one does not
 
 This repository draws pictures. The sister project draws pictures *and* measures
-the surface.
+the surface. The gap is deliberate — a second implementation of the measurement
+would be a duplicate nobody notices drifting until two chapters of the same
+thesis quote different numbers for the same molecule — but you should know where
+it runs.
 
 **Quantities.** Only the PyMOL pipeline locates and reports the σ-hole.
 
@@ -656,11 +701,6 @@ the surface.
 
 The values that both do report agree to every digit on the shared reference
 dataset, which is what §1.3 checks.
-
-**Figure options.** Both pipelines have `--rainbow`. PyMOL additionally offers
-several background colours in one run (`--backgrounds white black`), rendering a
-subset of the views (`--views pi sigma`), and an explicit margin around the
-molecule (`--buffer`). None of those three exist here.
 
 **Workflow.** PyMOL has `--two-pass`, which renders once to find the common
 colour scale and again to use it. Here that is a printed recommendation and a

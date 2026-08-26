@@ -68,7 +68,8 @@ def find_vmd(explicit=None):
 
 
 def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
-            shadows=0, snapshot=0, scene="esp.tcl", headless=0, verbose=True):
+            snapshot=0, scene="esp.tcl", headless=0, bg="white", suffix="",
+            verbose=True):
     """Ein VMD-Lauf fuer die angegebenen Ansichten. Rueckgabe: (rc, renderer).
 
     Ein Absturz von VMD hinterlaesst keinen Fehlertext, nur fehlende Dateien -
@@ -86,7 +87,8 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
         fh.write(f"set ESP_RES {{{w} {h}}}\n"
                  f"set ESP_QUIT 1\n"
                  f"set ESP_AO {ao}\n"
-                 f"set ESP_SHADOWS {shadows}\n"
+                 "set ESP_BG {" + bg + "}\n"
+                 "set ESP_SUFFIX {" + suffix + "}\n"
                  f"set ESP_OPAQUE {opaque}\n"
                  f"set ESP_SNAPSHOT {snapshot}\n"
                  f"set ESP_VIEWS {{{' '.join(views)}}}\n"
@@ -150,15 +152,15 @@ def read_scene(scene="esp.tcl"):
     return iso, rng, stats
 
 
-def tga_to_png(outdir, prefix, keep_tga=False):
+def tga_to_png(outdir, prefix, keep_tga=False, suffix=""):
     """VMDs Tachyon schreibt TGA - fuer die Ablage nach PNG wandeln."""
     from PIL import Image
     done = []
     for view in VIEWS:
-        tga = os.path.join(outdir, f"{prefix}_{view}.tga")
+        tga = os.path.join(outdir, f"{prefix}_{view}{suffix}.tga")
         if not os.path.exists(tga):
             continue
-        png = os.path.join(outdir, f"{prefix}_{view}.png")
+        png = os.path.join(outdir, f"{prefix}_{view}{suffix}.png")
         try:
             with Image.open(tga) as im:
                 im.convert("RGB").save(png)
@@ -209,7 +211,7 @@ def colorbar(path, rng, dpi=300, rainbow=False):
 
 
 def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
-             shadows=False, ao=False, rainbow=False):
+             ao=False, rainbow=False, backgrounds=("white",)):
     lines = [
         "Renderparameter (erzeugt von render_espVMD.py)",
         "=" * 55,
@@ -238,7 +240,7 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
         (f"Farbrampe         : RGB (Regenbogen: rot negativ, gruen null, "
          f"blau positiv)" if rainbow else
          f"Farbrampe         : RWB (rot negativ, weiss null, blau positiv)"),
-        f"Schlagschatten    : {'an' if shadows else 'aus'}",
+        f"Hintergrund       : {', '.join(backgrounds)}",
         f"Umgebungsverdeck. : {'an' if ao else 'aus'}",
         f"Bildgroesse       : {size[0]} x {size[1]} px" if size
         else "Bildgroesse       : unbekannt",
@@ -258,7 +260,7 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
 
 
 def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
-               vmd=None, res="1600x1280", ao=False, shadows=False,
+               vmd=None, res="1600x1280", ao=False, backgrounds=None,
                keep_tga=False, dpi=300, no_vmd=False, scene=None,
                headless=False, rainbow=False, verbose=True):
     """Bildersatz fuer das AKTUELLE Verzeichnis. Erwartet die Szene und die Cubes.
@@ -306,7 +308,15 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
         ("Transparenz, Fensterbild", dict(ao=0, opaque=0, snapshot=1,
                                           headless=0)),
         ("opak", dict(ao=0, opaque=1, snapshot=0, headless=hl))]
-    made = {}
+
+    # Jede Hintergrundfarbe ist ein eigener Bildersatz mit eigener
+    # Wiederholungslogik: dass Tachyon auf Weiss durchlaeuft, sagt nichts
+    # darueber, ob er es auf Schwarz auch tut. Nur bei mehr als einer Farbe
+    # bekommen die Dateien einen Namenszusatz, sonst hiesse der Standardsatz
+    # ploetzlich <molekuel>_pi_white.png.
+    backgrounds = list(backgrounds) if backgrounds else ["white"]
+    tag = {bg: (f"_{bg}" if len(backgrounds) > 1 else "") for bg in backgrounds}
+    made_per_bg, done = {}, []
 
     if not no_vmd:
         vmd = find_vmd(vmd)
@@ -320,46 +330,61 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
         if verbose:
             print(f"[1] VMD: {vmd}")
 
-        for label, opt in passes:
-            todo = [v for v in VIEWS if v not in made]
-            if not todo:
-                break
-            if label != passes[0][0] and verbose:
-                extra = (" (mit Fenster, anders geht der Mitschnitt nicht)"
-                         if headless and opt["snapshot"] else "")
-                print(f"    Zweiter Anlauf fuer {', '.join(todo)}: "
-                      f"{label}{extra}")
-            # Zeitmarke vor dem Lauf: eine TGA aus einem frueheren, abgestuerzten
-            # Durchgang liegt sonst noch da und wuerde als Erfolg gezaehlt.
-            t0 = time.time() - 1.0
-            rc, used = run_vmd(vmd, outdir, out_prefix, todo, w, h,
-                                   opt["ao"], opt["opaque"], label,
-                                   shadows=1 if shadows else 0,
-                                   snapshot=opt["snapshot"], scene=scene,
-                                   headless=opt["headless"], verbose=verbose)
-            # Der Renderer des ERSTEN Durchgangs steht im Protokoll; womit eine
-            # nachgeholte Ansicht entstanden ist, sagt ihre eigene Zeile.
-            if label == passes[0][0]:
-                renderer = used
-            for v in todo:
-                tga = os.path.join(outdir, f"{out_prefix}_{v}.tga")
-                if os.path.exists(tga) and os.path.getmtime(tga) >= t0:
-                    made[v] = label
-            missing = [v for v in VIEWS if v not in made]
-            if missing and label == passes[-1][0]:
-                print(f"    ! nicht gerendert: {', '.join(missing)} "
-                      f"(VMD-Rueckgabewert {rc}). Protokoll: "
-                      f"{os.path.join(outdir, '_vmd.log')}", file=sys.stderr)
+        for bg in backgrounds:
+            made = {}
+            made_per_bg[bg] = made
+            if len(backgrounds) > 1 and verbose:
+                print(f"    Hintergrund {bg}")
+            for label, opt in passes:
+                todo = [v for v in VIEWS if v not in made]
+                if not todo:
+                    break
+                if label != passes[0][0] and verbose:
+                    extra = (" (mit Fenster, anders geht der Mitschnitt nicht)"
+                             if headless and opt["snapshot"] else "")
+                    print(f"    Zweiter Anlauf fuer {', '.join(todo)}: "
+                          f"{label}{extra}")
+                # Zeitmarke vor dem Lauf: eine TGA aus einem frueheren,
+                # abgestuerzten Durchgang liegt sonst noch da und wuerde als
+                # Erfolg gezaehlt.
+                t0 = time.time() - 1.0
+                rc, used = run_vmd(vmd, outdir, out_prefix, todo, w, h,
+                                       opt["ao"], opt["opaque"], label,
+                                       snapshot=opt["snapshot"], scene=scene,
+                                       headless=opt["headless"], bg=bg,
+                                       suffix=tag[bg], verbose=verbose)
+                # Der Renderer des ERSTEN Durchgangs steht im Protokoll; womit
+                # eine nachgeholte Ansicht entstanden ist, sagt ihre eigene
+                # Zeile.
+                if bg == backgrounds[0] and label == passes[0][0]:
+                    renderer = used
+                for v in todo:
+                    tga = os.path.join(outdir,
+                                       f"{out_prefix}_{v}{tag[bg]}.tga")
+                    if os.path.exists(tga) and os.path.getmtime(tga) >= t0:
+                        made[v] = label
+                missing = [v for v in VIEWS if v not in made]
+                if missing and label == passes[-1][0]:
+                    print(f"    ! nicht gerendert: {', '.join(missing)} "
+                          f"({bg}, VMD-Rueckgabewert {rc}). Protokoll: "
+                          f"{os.path.join(outdir, '_vmd.log')}",
+                          file=sys.stderr)
 
     if verbose:
         print("[2] TGA -> PNG")
-    done = tga_to_png(outdir, out_prefix, keep_tga=keep_tga)
+    for bg in backgrounds:
+        done += tga_to_png(outdir, out_prefix, keep_tga=keep_tga,
+                           suffix=tag[bg])
     for png, size in done:
         if verbose:
             print(f"    -> {png}  ({size[0]} x {size[1]} px)")
     if not done and not no_vmd:
         print("    ! keine TGA-Dateien gefunden - hat VMD gerendert?",
               file=sys.stderr)
+
+    # Fuer die Zusammenfassung zaehlt der erste Hintergrund; die Zeile in
+    # settings.txt nennt alle.
+    made = made_per_bg.get(backgrounds[0], {})
 
     cb = os.path.join(outdir, f"{out_prefix}_colorbar.png")
     colorbar(cb, rng, dpi=dpi, rainbow=rainbow)
@@ -369,7 +394,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     st = os.path.join(outdir, f"{out_prefix}_settings.txt")
     size = done[0][1] if done else None
     settings(st, prefix, iso, rng, stats, size, renderer, made,
-             shadows=shadows, ao=ao, rainbow=rainbow)
+             ao=ao, rainbow=rainbow, backgrounds=backgrounds)
     if verbose:
         print(f"[4] -> {st}")
 
@@ -390,10 +415,11 @@ def main(argv=None):
                         "Schatten in die Vertiefungen, saeumt dabei aber auch "
                         "die Staebchen als graue Doppelgaenger auf der "
                         "Isoflaeche. PyMOL rendert ebenfalls ohne.")
-    p.add_argument("--shadows", action="store_true",
-                   help="Schlagschatten an. Standard aus: sie werfen die "
-                        "Staebchen als graue Kapseln auf die Isoflaeche, was "
-                        "wie ein Datenartefakt aussieht.")
+    p.add_argument("--backgrounds", nargs="+", default=["white"],
+                   metavar="FARBE",
+                   help="Hintergrundfarben, z.B. white black. Ab zwei Farben "
+                        "bekommen die Dateien einen Zusatz: "
+                        "<molekuel>_pi_black.png")
     p.add_argument("--keep-tga", action="store_true")
     p.add_argument("--dpi", type=int, default=300, help="Aufloesung der Skala")
     p.add_argument("--outdir", default="images")
@@ -428,7 +454,7 @@ def main(argv=None):
                  f"    python {conv} --struct <struktur> td.xyz tp.xyz")
 
     render_all(outdir=args.outdir, vmd=args.vmd, res=args.res,
-               ao=args.ao, shadows=args.shadows, scene=args.scene,
+               ao=args.ao, backgrounds=args.backgrounds, scene=args.scene,
                headless=args.headless, rainbow=args.rainbow,
                keep_tga=args.keep_tga, dpi=args.dpi, no_vmd=args.no_vmd)
     return 0

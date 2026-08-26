@@ -13,7 +13,7 @@
 #   set ESP_QUIT   0             VMD nach dem Rendern offen lassen
 #   set ESP_AO     0             Umgebungsverdeckung aus
 #   set ESP_OPAQUE 1             Isoflaeche opak rendern
-#   set ESP_SHADOWS 1            Schlagschatten an (siehe unten - meist nicht)
+#   set ESP_BG     black          Hintergrundfarbe
 #   set ESP_VIEWS  {sigma}       nur einzelne Ansichten
 #   set ESP_SNAPSHOT 1           Fenstermitschnitt statt Strahlverfolgung
 #   set ESP_SCENE  esp_check.tcl andere Szenendatei (Selbsttest)
@@ -25,7 +25,10 @@ if {![info exists ESP_RES]}    { set ESP_RES {1600 1280} }
 if {![info exists ESP_QUIT]}   { set ESP_QUIT 1 }
 if {![info exists ESP_AO]}     { set ESP_AO 1 }
 if {![info exists ESP_OPAQUE]}  { set ESP_OPAQUE 0 }
-if {![info exists ESP_SHADOWS]} { set ESP_SHADOWS 0 }
+if {![info exists ESP_BG]}     { set ESP_BG white }
+# Angehaengt an den Dateinamen - bei mehreren Hintergrundfarben in einem Lauf
+# unterscheidet er die Bildersaetze (<molekuel>_pi_black.tga).
+if {![info exists ESP_SUFFIX]} { set ESP_SUFFIX "" }
 if {![info exists ESP_VIEWS]}  { set ESP_VIEWS {pi edge sigma} }
 if {![info exists ESP_SNAPSHOT]} { set ESP_SNAPSHOT 0 }
 # Der Selbsttest schreibt seine Szene als esp_check.tcl, damit er die
@@ -62,15 +65,18 @@ if {$ESP_OPAQUE} { esp_opacity 1.0 }
 # stark. Vor allem die Umgebungsverdeckung: sie legt weiche Schatten in die
 # Vertiefungen zwischen den CH-Ausbuchtungen und ist der groesste Einzelschritt
 # von "Vorschau" zu "Publikationsbild".
-# Schlagschatten sind hier bewusst AUS. Sie werfen die Licorice-Staebchen als
-# graue Kapseln auf die Isoflaeche - im pi-Bild sitzt hinter jedem Staebchen ein
-# versetzter Doppelgaenger, in der Achsenansicht liegt ein Stab-Schatten mitten
-# auf der Kugel. Beides sieht aus wie ein Artefakt der Daten und ist keines.
-# PyMOL rendert ebenfalls ohne Schatten, das haelt die Bilder vergleichbar.
+# Die Umgebungsverdeckung wirft keine objektfoermigen Flecken, sondern dunkelt
+# nur Vertiefungen ab - deshalb ist sie zuschaltbar.
 #
-# Die Umgebungsverdeckung bleibt an: sie ist der Teil, der Tiefe erzeugt, und
-# sie wirft keine objektfoermigen Flecken, sondern dunkelt nur Vertiefungen ab.
-_try display shadows [expr {$ESP_SHADOWS ? "on" : "off"}]
+# Schlagschatten dagegen bleiben fest aus, ohne Option. Sie werfen die
+# Licorice-Staebchen als graue Kapseln auf die Isoflaeche: im pi-Bild sitzt
+# hinter jedem Staebchen ein versetzter Doppelgaenger, in der Achsenansicht
+# liegt ein Stab-Schatten mitten auf der Kugel. Beides sieht aus wie ein
+# Artefakt der Daten und ist keines, und PyMOL rendert ebenfalls ohne - das
+# haelt die Bilder vergleichbar. Wer sie doch sehen will, schaltet sie in der
+# Tk Console zu: 'display shadows on', dann 'esp_snapshot <name>'.
+_try display shadows off
+_try color Display Background $ESP_BG
 if {$ESP_AO} {
     _try display ambientocclusion on
     _try display aoambient 0.80
@@ -129,7 +135,7 @@ puts "Ziel: $ESP_OUTDIR" ; flush stdout
 # entstehen. Und nach jeder Zeile flush, damit im Log steht, wie weit VMD kam,
 # falls der Prozess mittendrin stirbt.
 foreach view $ESP_VIEWS {
-    set out [file join $ESP_OUTDIR "${prefix}_${view}.tga"]
+    set out [file join $ESP_OUTDIR "${prefix}_${view}${ESP_SUFFIX}.tga"]
     puts "== $view: beginne ==" ; flush stdout
     if {[catch {esp_view $view ; display update} err]} {
         puts "! $view: Ansicht fehlgeschlagen: $err" ; flush stdout

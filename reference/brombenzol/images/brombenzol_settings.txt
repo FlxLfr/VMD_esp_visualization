@@ -10,13 +10,13 @@ Schalenpunkte     : 313
                     (Gitterpunkte auf der Schale, nicht interpoliert -
                      zum Zitieren die Werte der PyMOL-Pipeline nehmen)
 Farbskala         : -0.0350 .. +0.0350 a.u.
-Farbrampe         : RWB (rot negativ, blau positiv)
-Schlagschatten    : aus
+Farbrampe         : RWB (rot negativ, weiss null, blau positiv)
+Hintergrund       : white
 Umgebungsverdeck. : aus
 Bildgroesse       : 1600 x 1061 px
 Renderer          : TachyonInternal
 Projektion        : orthoskopisch
 Ansicht pi        : Transparenz
 Ansicht edge      : Transparenz
-Ansicht sigma     : Transparenz
-Erzeugt           : 2026-08-26 15:16
+Ansicht sigma     : Transparenz, Fensterbild
+Erzeugt           : 2026-08-26 17:23
