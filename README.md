@@ -1,4 +1,4 @@
-# ESP Visualization — VMD
+# ESP Visualization
 
 **User Guide for deploying the VMD ESP Visualization Tool**
 
@@ -53,9 +53,6 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 8. [Repository layout](#8-repository-layout)
 9. [What the PyMOL pipeline does and this one does not](#9-what-the-pymol-pipeline-does-and-this-one-does-not)
 
-Everything that is background rather than instruction — why a second pipeline
-exists at all, how the two viewers differ mechanically, the choice of VMD
-version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
 
 ---
 
