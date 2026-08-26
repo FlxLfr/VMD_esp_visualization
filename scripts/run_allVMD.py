@@ -362,12 +362,6 @@ def main(argv=None):
                    help="Hintergrundfarben, z.B. white black. Ab zwei Farben "
                         "bekommen die Dateien einen Zusatz: "
                         "<molekuel>_pi_black.png")
-    g.add_argument("--headless", action="store_true",
-                   help="VMD ohne Fenster starten (-dispdev text). Bei neun "
-                        "Molekuelen spart das ein gutes Dutzend aufpoppender "
-                        "Fenster. Tachyon rendert ohne Anzeige weiter; nur der "
-                        "Fenstermitschnitt braucht sie und wird deshalb nur "
-                        "noch geholt, wenn Tachyon eine Ansicht nicht schafft.")
     g.add_argument("--keep-tga", action="store_true")
     g.add_argument("--dpi", type=int, default=300, help="Aufloesung der Skala")
     g.add_argument("--images-dir", default=None,
@@ -494,6 +488,7 @@ def main(argv=None):
             scale=(args.scale if str(args.scale) == "auto"
                    else float(args.scale)),
             fill=args.fill, colorscale=args.color_scale,
+            rainbow=args.rainbow,
             sources=", ".join(os.path.basename(c)
                               for c in e["cubes"].values()))
         print(f"    -> {tcl}   (Farbskala +/- {rng:.4f} a.u.)")
@@ -514,9 +509,8 @@ def main(argv=None):
                     outdir=args.images_dir, prefix=name, iso=args.iso,
                     rng=rng, stats=e["stats"], vmd=args.vmd, res=args.res,
                     ao=args.ao, backgrounds=args.backgrounds,
-                    scene=scene_name, headless=args.headless,
-                    rainbow=args.rainbow, keep_tga=args.keep_tga,
-                    dpi=args.dpi, verbose=True)
+                    scene=scene_name, rainbow=args.rainbow,
+                    keep_tga=args.keep_tga, dpi=args.dpi, verbose=True)
             finally:
                 os.chdir(cwd)
             row.update(made=res["made"], size=res["size"],

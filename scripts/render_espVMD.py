@@ -68,7 +68,7 @@ def find_vmd(explicit=None):
 
 
 def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
-            snapshot=0, scene="esp.tcl", headless=0, bg="white", suffix="",
+            snapshot=0, scene="esp.tcl", bg="white", suffix="",
             verbose=True):
     """Ein VMD-Lauf fuer die angegebenen Ansichten. Rueckgabe: (rc, renderer).
 
@@ -76,10 +76,6 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
     deshalb wird das komplette Protokoll mitgeschrieben und angehaengt, damit
     auch der Lauf davor noch nachlesbar ist.
 
-    headless=1 startet VMD mit "-dispdev text": kein Fenster, kein OpenGL. Die
-    Bildgroesse muss dann ueber "-size" auf der Kommandozeile kommen, "display
-    resize" gibt es ohne Display nicht. Der Fenstermitschnitt faellt damit weg -
-    er kopiert den OpenGL-Puffer, den es nicht gibt.
     """
     tcl = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        "render_esp.tcl").replace("\\", "/")
@@ -102,16 +98,13 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
                  # schraegstriche von Windows nicht als Escapes liest.
                  "set ESP_OUTDIR {" + outdir.replace("\\", "/") + "}\n"
                  "set ESP_PREFIX {" + prefix + "}\n"
-                 f"set ESP_HEADLESS {headless}\n"
                  # Geschweifte Klammern: Tcl substituiert darin nichts und
                  # Leerzeichen im Pfad ("2. Semester") stoeren nicht.
                  "source {" + tcl + "}\n")
-    cmd = [vmd, "-e", "_render_opts.tcl"]
-    if headless:
-        cmd += ["-dispdev", "text", "-size", str(w), str(h)]
     renderer = "TachyonInternal"
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        out = subprocess.run([vmd, "-e", "_render_opts.tcl"],
+                             capture_output=True, text=True, timeout=1800)
         text = (out.stdout or "") + (out.stderr or "")
         with open(os.path.join(outdir, "_vmd.log"), "a",
                   encoding="utf-8", errors="replace") as fh:
@@ -184,12 +177,10 @@ def colorbar(path, rng, dpi=300, rainbow=False):
     Balken zu den Bildern passt - und zur PyMOL-Variante, die dieselbe Rampe
     benutzt.
 
-    Der Regenbogenbalken bildet VMDs Skala RGB nach: rot - gruen - blau, linear
-    dazwischen. Das ergibt bei der Haelfte olivgelb und bei drei Vierteln
-    petrol, waehrend die PyMOL-Rampe fuenf Stuetzstellen hat und dort reines
-    Gelb und Cyan zeigt. Der Balken folgt bewusst VMD und nicht PyMOL: er ist
-    die Legende zu DIESEM Bild. Die Skalenbreite ist in beiden Projekten
-    dieselbe, nur die Zwischentoene sind etwas dunkler.
+    Der Regenbogenbalken zeigt die fuenf Stuetzfarben rot - gelb - gruen -
+    cyan - blau, dieselben wie in der PyMOL-Pipeline. VMDs eingebaute Skalen
+    kennen nur drei; die Szene programmiert die Farbtabelle deshalb selbst um
+    (esp_ramp in esp_template.tcl), damit Balken und Bild uebereinstimmen.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -197,8 +188,13 @@ def colorbar(path, rng, dpi=300, rainbow=False):
     from matplotlib.colors import LinearSegmentedColormap, Normalize
     from matplotlib.colorbar import ColorbarBase
 
+    # Exakt die Stuetzfarben der PyMOL-Pipeline (render_esp.py, RAMP_HEX) -
+    # und dieselben, die esp_ramp in die 1024 Eintraege von VMDs Farbtabelle
+    # schreibt. Balken und Bild zeigen damit dieselbe Rampe, und beide
+    # Projekte zeigen dieselbe wie das andere.
+    RAINBOW = ["#d40000", "#f0e000", "#00a000", "#00c8d4", "#0030d4"]
     cmap = LinearSegmentedColormap.from_list(
-        "esp", ["red", "green", "blue"] if rainbow else ["red", "white", "blue"])
+        "esp", RAINBOW if rainbow else ["red", "white", "blue"])
     fig = plt.figure(figsize=(6.0, 1.0))
     ax = fig.add_axes([0.06, 0.42, 0.88, 0.30])
     cb = ColorbarBase(ax, cmap=cmap, norm=Normalize(-rng, rng),
@@ -262,7 +258,7 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
 def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                vmd=None, res="1600x1280", ao=False, backgrounds=None,
                keep_tga=False, dpi=300, no_vmd=False, scene=None,
-               headless=False, rainbow=False, verbose=True):
+               rainbow=False, verbose=True):
     """Bildersatz fuer das AKTUELLE Verzeichnis. Erwartet die Szene und die Cubes.
 
     Rueckgabe: dict mit made (Ansicht -> womit gerendert), renderer, size, rng,
@@ -291,23 +287,14 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     # transparenten Lagen und Umgebungsverdeckung. Statt gleich alles
     # herunterzuschrauben: erst in voller Qualitaet, dann nur die fehlenden
     # Ansichten mit weniger. Was womit entstanden ist, steht in settings.txt.
-    hl = 1 if headless else 0
-    passes = ([("AO + Transparenz", dict(ao=1, opaque=0, snapshot=0,
-                                         headless=hl))]
+    passes = ([("AO + Transparenz", dict(ao=1, opaque=0, snapshot=0))]
               if ao else []) + [
-        ("Transparenz", dict(ao=0, opaque=0, snapshot=0, headless=hl)),
+        ("Transparenz", dict(ao=0, opaque=0, snapshot=0)),
         # Tachyon steigt in der Achsenansicht an den vielen durchquerten
         # transparenten Lagen aus. Der Fenstermitschnitt kennt keine
         # Rekursion und behaelt die Transparenz - erst danach opak.
-        #
-        # Dieser eine Durchgang braucht das Fenster: er kopiert den
-        # OpenGL-Puffer. Auch mit --headless wird er deshalb mit Anzeige
-        # gestartet - aber nur, wenn Tachyon vorher wirklich ausgestiegen ist.
-        # Ein Bild zu verlieren waere der schlechtere Handel als ein Fenster,
-        # das kurz aufgeht.
-        ("Transparenz, Fensterbild", dict(ao=0, opaque=0, snapshot=1,
-                                          headless=0)),
-        ("opak", dict(ao=0, opaque=1, snapshot=0, headless=hl))]
+        ("Transparenz, Fensterbild", dict(ao=0, opaque=0, snapshot=1)),
+        ("opak", dict(ao=0, opaque=1, snapshot=0))]
 
     # Jede Hintergrundfarbe ist ein eigener Bildersatz mit eigener
     # Wiederholungslogik: dass Tachyon auf Weiss durchlaeuft, sagt nichts
@@ -340,10 +327,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                 if not todo:
                     break
                 if label != passes[0][0] and verbose:
-                    extra = (" (mit Fenster, anders geht der Mitschnitt nicht)"
-                             if headless and opt["snapshot"] else "")
-                    print(f"    Zweiter Anlauf fuer {', '.join(todo)}: "
-                          f"{label}{extra}")
+                    print(f"    Zweiter Anlauf fuer {', '.join(todo)}: {label}")
                 # Zeitmarke vor dem Lauf: eine TGA aus einem frueheren,
                 # abgestuerzten Durchgang liegt sonst noch da und wuerde als
                 # Erfolg gezaehlt.
@@ -351,8 +335,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                 rc, used = run_vmd(vmd, outdir, out_prefix, todo, w, h,
                                        opt["ao"], opt["opaque"], label,
                                        snapshot=opt["snapshot"], scene=scene,
-                                       headless=opt["headless"], bg=bg,
-                                       suffix=tag[bg], verbose=verbose)
+                                       bg=bg, suffix=tag[bg], verbose=verbose)
                 # Der Renderer des ERSTEN Durchgangs steht im Protokoll; womit
                 # eine nachgeholte Ansicht entstanden ist, sagt ihre eigene
                 # Zeile.
@@ -423,11 +406,6 @@ def main(argv=None):
     p.add_argument("--keep-tga", action="store_true")
     p.add_argument("--dpi", type=int, default=300, help="Aufloesung der Skala")
     p.add_argument("--outdir", default="images")
-    p.add_argument("--headless", action="store_true",
-                   help="VMD ohne Fenster starten (-dispdev text). Tachyon "
-                        "rendert weiter, der Fenstermitschnitt nicht - er wird "
-                        "nur noch geholt, wenn Tachyon eine Ansicht nicht "
-                        "schafft.")
     p.add_argument("--rainbow", action="store_true",
                    help="Regenbogenrampe: rendert esp_rainbow.tcl und schreibt "
                         "<prefix>_rainbow_*, der Standardsatz bleibt erhalten")
@@ -455,7 +433,7 @@ def main(argv=None):
 
     render_all(outdir=args.outdir, vmd=args.vmd, res=args.res,
                ao=args.ao, backgrounds=args.backgrounds, scene=args.scene,
-               headless=args.headless, rainbow=args.rainbow,
+               rainbow=args.rainbow,
                keep_tga=args.keep_tga, dpi=args.dpi, no_vmd=args.no_vmd)
     return 0
 

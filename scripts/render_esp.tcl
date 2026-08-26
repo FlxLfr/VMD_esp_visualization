@@ -39,11 +39,6 @@ if {![info exists ESP_SCENE]}  { set ESP_SCENE esp.tcl }
 # Molekuelordners.
 if {![info exists ESP_OUTDIR]} { set ESP_OUTDIR images }
 if {![info exists ESP_PREFIX]} { set ESP_PREFIX [file tail [pwd]] }
-# Ohne Fenster (-dispdev text) gibt es kein Display: "display resize" und der
-# GLSL-Rendermodus laufen ins Leere, und die Bildgroesse kommt stattdessen von
-# "-size" auf der Kommandozeile. Tachyon rendert trotzdem - er zeichnet aus dem
-# Szenengraphen, nicht aus dem OpenGL-Puffer.
-if {![info exists ESP_HEADLESS]} { set ESP_HEADLESS 0 }
 
 if {![file exists $ESP_SCENE]} {
     puts "render_esp.tcl: $ESP_SCENE nicht gefunden."
@@ -84,21 +79,13 @@ if {$ESP_AO} {
 }
 _try display antialias on
 _try display depthcue off
-if {!$ESP_HEADLESS} {
-    _try display resize [lindex $ESP_RES 0] [lindex $ESP_RES 1]
-    display update
-}
+_try display resize [lindex $ESP_RES 0] [lindex $ESP_RES 1]
+display update
 
 # TachyonInternal rendert in Fenstergroesse. Wenn der Bildschirm kleiner ist
 # als ESP_RES, klemmt Windows das Fenster ab und das Bild wird entsprechend
-# kleiner - deshalb wird die tatsaechliche Groesse gemeldet. Ohne Fenster
-# entfaellt diese Deckelung: dort gilt "-size" und damit genau ESP_RES.
-if {$ESP_HEADLESS} {
-    puts "Fenster: [lindex $ESP_RES 0] [lindex $ESP_RES 1] (ohne Anzeige)"
-} else {
-    puts "Fenster: [display get size]"
-}
-flush stdout
+# kleiner - deshalb wird die tatsaechliche Groesse gemeldet.
+puts "Fenster: [display get size]" ; flush stdout
 
 # Der Fenstermitschnitt ist der Notausgang fuer die Achsenansicht: Tachyon
 # steigt dort an der Zahl der durchquerten transparenten Lagen aus, OpenGL
@@ -110,14 +97,6 @@ flush stdout
 # Sonst: auf der GPU liefert der OptiX-Pfad dieselbe Szene schneller. Nicht
 # jeder Build hat ihn.
 set RENDERER TachyonInternal
-if {$ESP_SNAPSHOT && $ESP_HEADLESS} {
-    # Sollte nicht vorkommen - render_espVMD.py startet den Mitschnitt-
-    # Durchgang immer mit Anzeige. Wer das Skript von Hand aufruft, soll
-    # aber nicht ratlos vor einer leeren Datei stehen.
-    puts "! Fenstermitschnitt braucht eine Anzeige - ohne Fenster nicht"
-    puts "  moeglich. Es wird strahlverfolgt."
-    set ESP_SNAPSHOT 0
-}
 if {$ESP_SNAPSHOT} {
     set RENDERER snapshot
 } elseif {[lsearch [render list] TachyonLOptiXInternal] >= 0} {

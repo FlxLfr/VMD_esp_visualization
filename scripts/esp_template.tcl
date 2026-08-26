@@ -22,6 +22,41 @@ proc _try {args} {
     }
 }
 
+# Farbskala mit beliebig vielen Stuetzfarben.
+#
+# "color scale method" kennt nur drei: kleinster Wert, Mitte, groesster. Die
+# Regenbogenrampe der PyMOL-Pipeline hat fuenf (rot, gelb, gruen, cyan, blau),
+# und mit dreien wird daraus rot-gruen-blau mit olivgruenen und petrolfarbenen
+# Zwischentoenen - eine andere Rampe, nicht dieselbe.
+#
+# VMDs Farbskala ist aber eine Tabelle aus 1024 Farben, deren IDs hinter den
+# benannten Farben liegen ([colorinfo num], normalerweise 33). Jede davon
+# laesst sich mit "color change rgb" einzeln setzen. Damit ist die Rampe frei
+# waehlbar und exakt dieselbe wie drueben.
+#
+# Wichtig: NACH "color scale method" aufrufen. Ein spaeteres method-Kommando
+# erzeugt die Tabelle neu und ueberschreibt alles hier Gesetzte.
+proc esp_ramp {stops} {
+    if {[llength $stops] < 2} { return }        ;# leer = VMDs eigene Rampe
+    set base [colorinfo num]
+    set n    1024
+    set segs [expr {[llength $stops] - 1}]
+    _try display update off
+    for {set i 0} {$i < $n} {incr i} {
+        set t [expr {double($i) / ($n - 1) * $segs}]
+        set k [expr {int($t)}]
+        if {$k >= $segs} { set k [expr {$segs - 1}] }
+        set f  [expr {$t - $k}]
+        set c0 [lindex $stops $k]
+        set c1 [lindex $stops [expr {$k + 1}]]
+        color change rgb [expr {$base + $i}] \
+            [expr {[lindex $c0 0] + $f * ([lindex $c1 0] - [lindex $c0 0])}] \
+            [expr {[lindex $c0 1] + $f * ([lindex $c1 1] - [lindex $c0 1])}] \
+            [expr {[lindex $c0 2] + $f * ([lindex $c1 2] - [lindex $c0 2])}]
+    }
+    _try display update on
+}
+
 # --- 1) Daten -------------------------------------------------
 # Die Cube-Datei bringt die Atome selbst mit, in Bohr und aus derselben Quelle
 # wie das Gitter - eine separate Strukturdatei kann also nicht verrutschen.
@@ -73,6 +108,11 @@ mol addrep $espmol
 color scale method @@COLORSCALE@@
 color scale midpoint 0.5
 mol scaleminmax $espmol $REP_SURF @@RANGE_NEG@@ @@RANGE@@
+
+# Stuetzfarben der Rampe, aus der PyMOL-Pipeline uebernommen. Leer heisst:
+# VMDs eingebaute Skala @@COLORSCALE@@ bleibt, wie sie ist.
+set RAMP_STOPS {@@RAMP_STOPS@@}
+esp_ramp $RAMP_STOPS
 
 # --- 3) Befehle -----------------------------------------------
 

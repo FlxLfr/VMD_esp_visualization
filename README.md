@@ -352,7 +352,6 @@ principal axis instead; read the file name as "axial view" in that case.
 | `--scene` | `esp.tcl` (`esp_rainbow.tcl` with `--rainbow`) | scene file to render; the smoke test uses `esp_check.tcl` |
 | `--rainbow` | off | render the rainbow scene into a separate `<prefix>_rainbow_*` set |
 | `--res` | `1600x1280` | image size in px |
-| `--headless` | off | start VMD without a window (`-dispdev text`) — see below |
 | `--ao` | off | ambient occlusion: soft shadows in the recesses, slower |
 | `--backgrounds` | `white` | one or more background colours, e.g. `--backgrounds white black` renders each view once per colour |
 | `--keep-tga` | off | keep VMD's intermediate TGA files |
@@ -366,8 +365,8 @@ principal axis instead; read the file name as "axial view" in that case.
 # everything autodetected in the current molecule folder
 python ../../scripts/render_espVMD.py
 
-# no window, full resolution, deeper shading
-python ../../scripts/render_espVMD.py --headless --res 2400x1920 --ao
+# full resolution, deeper shading
+python ../../scripts/render_espVMD.py --res 2400x1920 --ao
 
 # second image set with the rainbow ramp, standard set kept
 python ../../scripts/render_espVMD.py --rainbow
@@ -379,34 +378,32 @@ python ../../scripts/render_espVMD.py --no-vmd
 python ../../scripts/render_espVMD.py --vmd "C:\Program Files\VMD\vmd.exe"
 ```
 
-**`--headless` keeps the window shut.** VMD normally opens its OpenGL window for
-every pass, which over nine molecules is a dozen windows stealing focus.
-`--headless` starts it with `-dispdev text`: no window, no OpenGL. Tachyon still
-renders — it works from the scene graph, not from the framebuffer — and the image
-size then comes from `-size` on the command line rather than `display resize`, so
-it is no longer capped by your screen.
-
 **The renderer falls back, and the fallback is recorded.** Tachyon can abort on
 the axial view, where the line of sight crosses many transparent layers. The
 script then re-renders the missing views as an OpenGL window capture, which keeps
 the transparency, and only failing that as an opaque surface. Which pass produced
 which view is written into `*_settings.txt` and `summary.csv` — when a figure was
 made a different way, that must not disappear from the record. The window capture
-is the one pass that genuinely needs a window, so `--headless` defers rather than
-removes it: the window appears only when Tachyon has already failed.
+copies the OpenGL buffer, so the VMD window must be on screen and not covered
+while it runs.
 
 **The colour bar comes from matplotlib, not from VMD.** VMD has no legend object,
 and neither has PyMOL, so both pipelines draw it the same way, as a separate PNG.
 
-**On `--rainbow`.** It selects VMD's `RGB` scale: smallest value red, middle
-green, largest blue — the same direction as the PyMOL ramp, so the two rainbow
-sets read the same way round. They do not look identical, though. VMD
-interpolates linearly between three anchor colours, so a quarter of the way up
-you get olive rather than yellow and three quarters of the way up teal rather
-than cyan; PyMOL's ramp has five anchors and shows those tones pure. Endpoints,
-the zero point and the width of the scale are the same in both. The colour bar
-follows VMD rather than PyMOL, because it is the legend for *this* picture — the
-rainbow bar is correspondingly darker in the middle than its PyMOL counterpart.
+**On `--rainbow`.** The ramp is **the same five anchor colours as the PyMOL
+pipeline** — red, yellow, green, cyan, blue, red for negative as always. That
+takes one trick: `color scale method` only accepts three anchors (smallest,
+middle, largest), and three give red–green–blue with muddy olive and teal in
+between, which is a different ramp, not the same one. VMD's colour scale is,
+however, a table of 1024 colours whose ids start behind the named colours
+(`colorinfo num`), and each one can be set with `color change rgb`. The
+generated scene does exactly that, in `esp_ramp`, right after setting the base
+method — a later `color scale method` would rebuild the table and undo it.
+
+So the rainbow images and their colour bar match their PyMOL counterparts
+anchor for anchor. Red–white–blue still uses VMD's built-in `RWB`, whose ends
+are pure red and blue against PyMOL's slightly darker `#d40000` / `#0030d4`;
+aligning that too would mean re-rendering every standard image set.
 
 Rainbow output never collides with the standard set: the scene is
 `esp_rainbow.tcl`, the images are `<prefix>_rainbow_pi.png` and so on. Use it as
@@ -432,7 +429,7 @@ Then:
 
 ```bash
 cd scripts
-python run_allVMD.py --root ../sandbox --headless
+python run_allVMD.py --root ../sandbox
 ```
 
 This converts what needs converting, writes an `esp.tcl` next to each molecule's
@@ -479,7 +476,6 @@ small and the run says so: which molecules it clips, and what they would need.
 | `--color-scale` | `RWB` (`RGB` with `--rainbow`) | passed through |
 | `--rainbow` | off | rainbow ramp; writes `esp_rainbow.tcl` and a separate `<molecule>_rainbow_*` set |
 | `--no-render` | off | convert and write the scene only |
-| `--headless` | off | start VMD without a window |
 | `--res` | `1600x1280` | passed through |
 | `--backgrounds` | `white` | one or more background colours, passed through |
 | `--ao`, `--keep-tga`, `--dpi`, `--vmd` | | passed through |
@@ -490,10 +486,10 @@ small and the run says so: which molecules it clips, and what they would need.
 
 ```bash
 # the normal run
-python run_allVMD.py --root ../sandbox --headless
+python run_allVMD.py --root ../sandbox
 
 # the second run, with the scale the first one recommended
-python run_allVMD.py --root ../sandbox --headless --esp-range 0.0700
+python run_allVMD.py --root ../sandbox --esp-range 0.0700
 
 # pick individual molecules out of a larger root
 python run_allVMD.py --root ../sandbox --only Pyridine Me-Pyr
@@ -503,7 +499,7 @@ python run_allVMD.py --root ../sandbox --only "*benzol"
 python run_allVMD.py --root ../sandbox --esp-range 0.035
 
 # second image set with the rainbow ramp, standard set kept
-python run_allVMD.py --root ../sandbox --headless --rainbow --esp-range 0.0700
+python run_allVMD.py --root ../sandbox --rainbow --esp-range 0.0700
 
 # convert and write the scenes, render later
 python run_allVMD.py --root ../sandbox --no-render

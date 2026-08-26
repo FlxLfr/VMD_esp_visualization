@@ -541,9 +541,42 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
 # VMD-Szene
 # ----------------------------------------------------------------------------
 
+# ----------------------------------------------------------------------------
+# Farbrampen
+#
+# Dieselben Stuetzfarben wie in der PyMOL-Pipeline (render_esp.py, RAMP_HEX),
+# damit beide Bildersaetze wirklich dieselbe Rampe zeigen und nicht nur
+# dieselbe Richtung. VMDs eingebaute Skalen kennen nur drei Stuetzfarben; die
+# fuenf des Regenbogens werden deshalb ueber esp_ramp in esp_template.tcl in
+# die 1024 Eintraege der Farbtabelle geschrieben.
+#
+# Rot-weiss-blau bleibt vorerst VMDs eigenes RWB (reines Rot und Blau statt
+# PyMOLs etwas dunklerem #d40000/#0030d4). Ein Wechsel wuerde jeden bereits
+# gerenderten Standardsatz minimal veraendern.
+# ----------------------------------------------------------------------------
+
+RAMP_HEX = {
+    "rainbow": ["#d40000", "#f0e000", "#00a000", "#00c8d4", "#0030d4"],
+    "redblue": ["#d40000", "#ffffff", "#0030d4"],
+}
+
+
+def ramp_stops(name):
+    """Stuetzfarben als Tcl-Liste {{r g b} {r g b} ...}, Werte 0..1."""
+    hexes = RAMP_HEX.get(name)
+    if not hexes:
+        return ""
+    out = []
+    for h in hexes:
+        h = h.lstrip("#")
+        out.append("{%s}" % " ".join(
+            f"{int(h[i:i+2], 16) / 255.0:.4f}" for i in (0, 2, 4)))
+    return " ".join(out)
+
+
 def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
                      opacity=0.50, scale="auto", fill=0.85, colorscale="RWB",
-                     sources="", atoms=None):
+                     sources="", atoms=None, rainbow=False):
     """Fuellt esp_template.tcl.
 
     Ueber @@PLATZHALTER@@ statt str.format oder string.Template: Tcl benutzt
@@ -595,6 +628,7 @@ def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
         "@@SCALE@@": scale if scale == "auto" else f"{scale:g}",
         "@@FILL@@": f"{fill:g}",
         "@@COLORSCALE@@": colorscale,
+        "@@RAMP_STOPS@@": ramp_stops("rainbow" if rainbow else None),
         "@@STATS@@": note + axis_note,
         "@@ROT_PI@@": rot["pi"],
         "@@ROT_EDGE@@": rot["edge"],
@@ -769,7 +803,7 @@ def main(argv=None):
                      scale=(args.scale if str(args.scale) == "auto"
                             else float(args.scale)),
                      fill=args.fill,
-                     colorscale=args.color_scale,
+                     colorscale=args.color_scale, rainbow=args.rainbow,
                      sources=", ".join(os.path.basename(g) for g in args.grids))
     if verbose:
         print(f"[4] VMD-Szene: {tcl}   (Farbskala +/- {rng:.4f} a.u.)")
