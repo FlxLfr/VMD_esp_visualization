@@ -53,9 +53,7 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 8. [Repository layout](#8-repository-layout)
 9. [What the PyMOL pipeline does and this one does not](#9-what-the-pymol-pipeline-does-and-this-one-does-not)
 
-Everything that is background rather than instruction — why a second pipeline
-exists at all, how the two viewers differ mechanically, the choice of VMD
-version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
+
 
 ---
 
@@ -66,20 +64,18 @@ version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
 Download from the
 [TCBG test release page](https://www.ks.uiuc.edu/Research/vmd/alpha/) (free
 registration) and take **Version 1.9.4, "Windows 64-bit, CUDA, OptiX, OSPray"**.
-The page labels it "Windows 10"; that is the tested minimum, not an upper limit,
-and it runs on Windows 11 natively. Version 2.0.0 exists as a monthly alpha and
-is deliberately not used here — see `docs/Details.docx`.
+Version 2.0.0 exists as a monthly alpha and is deliberately not used here — see `docs/Details.docx`.
 
 VMD is not a conda package and the Windows installer does **not** put it on the
 `PATH`. The scripts find it anyway: they check the `PATH`, then the `VMDDIR`
 environment variable that the installer does set, then the usual install
 folders. Only if all three fail do you need `--vmd "C:\Program Files\VMD\vmd.exe"`
-or a `PATH` entry — the PowerShell snippet for that is in `docs/Details.docx`.
+or a `PATH` entry. The PowerShell snippet for that is in `docs/Details.docx`.
 
 ### 1.2 Create the environment
 
 This assumes a working conda; if you have none, follow §1.1 of the PyMOL
-project's README first — it is the same installation.
+project's README first.
 
 ```bash
 conda env create -f environment.yml
@@ -227,7 +223,7 @@ not from the file name. Expect a minute or two per grid.
 |---|---|---|
 | `--tcl-only` | off | rewrite `esp.tcl` from the existing cubes, touching no grid. Sub-second instead of minutes. |
 | `--no-vmd` | off | cubes only, no scene. |
-| `--esp-range` | `auto` | half-width of the colour scale in a.u., or `auto` — derived from V_S,min/V_S,max on the shell. |
+| `--esp-range` | `auto` | half-width of the colour scale in a.u., or `auto` derived from V_S,min/V_S,max on the shell. |
 | `--iso` | `0.001` | isovalue of the density surface drawn in the scene. |
 | `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
 | `--scale` | `auto` | zoom, a number or `auto` — from the molecule's size and the window height. |
@@ -253,9 +249,6 @@ python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --esp-range 0.035 --opaci
 **Never re-run the conversion just to change the scene.** Converting takes
 minutes; `--tcl-only` reads the two cube headers, works out which is which and
 rewrites the scene in well under a second. `--struct` is not needed then.
-
-**On `--stride`.** Use `--stride 2` while exploring and for images; use full
-resolution whenever a value goes into a table.
 
 What the converter takes care of, which is where hand-rolled conversions usually
 go wrong:
@@ -612,47 +605,11 @@ VMD_esp_visualization/
 └── sandbox/                      your own data and experiments, not tracked
 ```
 
-**Large files are deliberately not tracked.** `.gitignore` excludes `*.cube`,
-`*.dx` and the raw `td.xyz`/`tp.xyz` grids — a full-resolution cube is ~200 MB
-and GitHub rejects anything above 100 MB. Regenerate them with
-`xyzToCubeToVMDVis.py`. `esp.tcl` is generated too and is ignored inside molecule
-folders; only the scripts under `scripts/` are tracked.
-
-**`reference/` and `sandbox/` do different jobs.** `reference/` holds a
-known-good example and is committed; `sandbox/` is where your own molecules and
-the large raw data live, and git ignores it entirely. If a run goes wrong,
-`reference/` tells you whether the problem is your installation or your data. Its
-decimated grids are the one exception to the rule above and are tracked on
-purpose — that is what makes a fresh clone self-testing. Rebuild them, or make a
-set for another molecule, with:
-
-```bash
-python tools/make_reference.py sandbox/brombenzol --name brombenzol
-```
-
-It crops to the bounding box of the ρ > iso/2 region plus a margin, so the whole
-isosurface stays inside the grid, and then keeps every n-th point (`--stride`).
-It ships as raw `pointval` files rather than cubes on purpose: unit conversion
-and index reordering are the steps most likely to break, and ready-made cubes
-would skip exactly those.
-
-**The scene lives in its own file.** `esp_template.tcl` is real Tcl with
-`@@placeholder@@` markers that the Python script fills in, not a Python string —
-that keeps syntax highlighting and makes escaping mistakes visible.
-
-The name `xyzToCubeToVMDVis.py` is deliberately not `xyzToCube.py`: the PyMOL
-project has a script by that name with a different feature set, and two files
-with one name in two repositories is how the wrong one gets edited.
-
----
 
 ## 9. What the PyMOL pipeline does and this one does not
 
 This repository draws pictures. The sister project draws pictures *and* measures
-the surface. The gap is deliberate — a second implementation of the measurement
-would be a duplicate nobody notices drifting until two chapters of the same
-thesis quote different numbers for the same molecule — but you should know where
-it runs.
+the surface.
 
 **Quantities.** Only the PyMOL pipeline locates and reports the σ-hole.
 
