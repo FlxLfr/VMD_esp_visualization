@@ -10,8 +10,8 @@
 td.xyz
 tp.xyz
 
-# ...except the reference dataset. Those grids are decimated to 0.75 Bohr
-# (~2.3 MB each) and are committed on purpose: they are RAW pointval files, not
+# ...except the reference dataset. Those grids are 32x37x24 points at 0.60 Bohr
+# (~1.7 MB each) and are committed on purpose: they are RAW pointval files, not
 # cubes, so a fresh clone exercises the whole chain including xyzToCube.py -
 # unit conversion and index reordering included. Shipping cubes instead would
 # skip exactly the step most likely to break.
@@ -33,6 +33,7 @@ reference/summary_check.csv
 # ---------------------------------------------------------------------------
 vmdscene*
 *.tga
+**/_vmd.log
 *.ppm
 *.rgb
 snapshot*.png

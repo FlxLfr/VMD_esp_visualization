@@ -15,6 +15,8 @@
 #   set ESP_OPAQUE 1             Isoflaeche opak rendern
 #   set ESP_SHADOWS 1            Schlagschatten an (siehe unten - meist nicht)
 #   set ESP_VIEWS  {sigma}       nur einzelne Ansichten
+#   set ESP_SNAPSHOT 1           Fenstermitschnitt statt Strahlverfolgung
+#   set ESP_SCENE  esp_check.tcl andere Szenendatei (Selbsttest)
 # ==============================================================
 
 if {![info exists ESP_RES]}    { set ESP_RES {1600 1280} }
@@ -23,23 +25,19 @@ if {![info exists ESP_AO]}     { set ESP_AO 1 }
 if {![info exists ESP_OPAQUE]}  { set ESP_OPAQUE 0 }
 if {![info exists ESP_SHADOWS]} { set ESP_SHADOWS 0 }
 if {![info exists ESP_VIEWS]}  { set ESP_VIEWS {pi edge sigma} }
+if {![info exists ESP_SNAPSHOT]} { set ESP_SNAPSHOT 0 }
+# Der Selbsttest schreibt seine Szene als esp_check.tcl, damit er die
+# committete esp.tcl eines echten Laufs nicht ueberschreibt.
+if {![info exists ESP_SCENE]}  { set ESP_SCENE esp.tcl }
 
-if {![file exists esp.tcl]} {
-    puts "render_esp.tcl: esp.tcl nicht gefunden."
+if {![file exists $ESP_SCENE]} {
+    puts "render_esp.tcl: $ESP_SCENE nicht gefunden."
     puts "  Aus dem Molekuelordner starten, oder erst xyzToCubeToVMDVis.py laufen lassen."
     if {$ESP_QUIT} { quit }
     return
 }
 
-source esp.tcl
-
-# Ohne Balken darf das Molekuel das Bild fuellen; esp.tcl laesst darunter Platz.
-set FILL 0.85
-
-# Der Farbbalken kommt fuer die Ausgabebilder aus matplotlib, wie in der
-# PyMOL-Pipeline - separates PNG, gleiche Konstruktion, damit die beiden
-# Bildersaetze wirklich vergleichbar sind. In der Szene stoert er hier nur.
-esp_colorbar_off
+source $ESP_SCENE
 
 # Notausgang fuer die Achsenansicht: dort schneidet jeder Sehstrahl viele
 # transparente Lagen der Isoflaeche, und mit Umgebungsverdeckung zusammen
@@ -76,10 +74,19 @@ display update
 # kleiner - deshalb wird die tatsaechliche Groesse gemeldet.
 puts "Fenster: [display get size]" ; flush stdout
 
-# Auf der GPU liefert der OptiX-Pfad dieselbe Szene schneller und mit besserer
-# Umgebungsverdeckung. Nicht jeder Build hat ihn.
+# Der Fenstermitschnitt ist der Notausgang fuer die Achsenansicht: Tachyon
+# steigt dort an der Zahl der durchquerten transparenten Lagen aus, OpenGL
+# zeichnet sie dagegen ohne Rekursion. Das Bild ist etwas weniger fein, behaelt
+# aber die Transparenz - besser als eine opake Ersatzdarstellung.
+# Achtung: der Mitschnitt kopiert den Bildschirminhalt, das VMD-Fenster darf
+# also nicht verdeckt sein.
+#
+# Sonst: auf der GPU liefert der OptiX-Pfad dieselbe Szene schneller. Nicht
+# jeder Build hat ihn.
 set RENDERER TachyonInternal
-if {[lsearch [render list] TachyonLOptiXInternal] >= 0} {
+if {$ESP_SNAPSHOT} {
+    set RENDERER snapshot
+} elseif {[lsearch [render list] TachyonLOptiXInternal] >= 0} {
     set RENDERER TachyonLOptiXInternal
 }
 puts "Renderer: $RENDERER" ; flush stdout

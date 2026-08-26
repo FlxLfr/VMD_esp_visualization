@@ -274,7 +274,8 @@ def shell_range(density, esp, iso=0.001, step=0.005):
     return vmin, vmax, amp, int(mask.sum())
 
 
-STATS_RE = re.compile(r"V_S,min=(\S+)\s+V_S,max=(\S+)\s+range=(\S+)")
+STATS_RE = re.compile(r"V_S,min=(\S+)\s+V_S,max=(\S+)\s+range=(\S+)"
+                      r"(?:\s+iso=\S+\s+n=(\d+))?")
 
 
 def stats_comment(stats, iso):
@@ -284,12 +285,35 @@ def stats_comment(stats, iso):
             f" iso={iso:g} n={npts}")
 
 
+def read_cube(path):
+    """Gaussian-Cube -> float32-Gitter [i1, i2, i3].
+
+    Nur so viel Parser, wie die Schalenstatistik braucht. Gebraucht wird das
+    fuer Cubes, die noch keine Kennzahlen im Kopf tragen (aeltere Laeufe) - die
+    ~15 s Lesen sind immer noch besser als Minuten Neukonvertierung.
+    """
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        fh.readline()
+        fh.readline()
+        natoms = abs(int(fh.readline().split()[0]))
+        dims = [int(fh.readline().split()[0]) for _ in range(3)]
+        for _ in range(natoms):
+            fh.readline()
+        values = np.asarray(fh.read().split(), dtype=np.float32)
+    if values.size != dims[0] * dims[1] * dims[2]:
+        raise ValueError(f"{path}: {values.size} Werte, erwartet "
+                         f"{dims[0] * dims[1] * dims[2]}.")
+    return values.reshape(dims)
+
+
 def read_stats(cube_path):
     """Kennzahlen aus der ersten Zeile eines frueher geschriebenen Cubes."""
     with open(cube_path, "r", encoding="utf-8", errors="replace") as fh:
         m = STATS_RE.search(fh.readline())
-    return (float(m.group(1)), float(m.group(2)), float(m.group(3)), 0) \
-        if m else None
+    if not m:
+        return None
+    return (float(m.group(1)), float(m.group(2)), float(m.group(3)),
+            int(m.group(4)) if m.group(4) else 0)
 
 
 # ----------------------------------------------------------------------------
@@ -342,7 +366,7 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
 # ----------------------------------------------------------------------------
 
 def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
-                     opacity=0.50, scale="auto", fill=0.55, colorscale="RWB",
+                     opacity=0.50, scale="auto", fill=0.85, colorscale="RWB",
                      sources=""):
     """Fuellt esp_template.tcl.
 
@@ -425,10 +449,9 @@ def main(argv=None):
     g.add_argument("--scale", default="auto",
                    help="Zoom: Zahl, oder 'auto' (Standard) aus der "
                         "Molekuelgroesse und der Fensterhoehe")
-    g.add_argument("--fill", type=float, default=0.55,
+    g.add_argument("--fill", type=float, default=0.85,
                    help="Anteil der Fensterhoehe fuer das Molekuel bei "
-                        "--scale auto (Standard 0.55; laesst Platz fuer den "
-                        "Farbbalken, render_esp.tcl setzt 0.85)")
+                        "--scale auto (Standard 0.85)")
     g.add_argument("--color-scale", default="RWB", help="RWB = rot negativ")
     args = p.parse_args(argv)
 

@@ -3,8 +3,13 @@
 # Erzeugt von xyzToCubeToVMDVis.py (@@STAMP@@) aus @@SOURCES@@
 #
 # Start:  vmd -e esp.tcl        oder in der Tk Console:  source esp.tcl
-# Befehle: esp_view pi|edge|sigma, esp_iso, esp_range, esp_opacity,
-#          esp_colorbar, esp_colorbar_off, esp_snapshot
+# Befehle: esp_view pi|edge|sigma, esp_iso, esp_range, esp_opacity, esp_snapshot
+#
+# Eine Farbskala zeichnet diese Szene bewusst NICHT. VMD hat kein Legenden-
+# objekt; man muesste den Balken als Grafik in eine eigene Molekuel-ID legen und
+# von der Maus abkoppeln - das ist fummelig und sieht nie ganz richtig aus.
+# Fuer die Ausgabebilder macht render_espVMD.py die Skala mit matplotlib, als
+# eigenes PNG in images/. Genauso arbeitet die PyMOL-Pipeline.
 # ==============================================================
 
 # VMD-Versionen kennen unterschiedliche display-/material-Optionen. Ein
@@ -119,7 +124,6 @@ proc esp_center {} {
 # sigma ist nicht beliebig - falsch herum zeigt das Bild die Gegenseite, und
 # weil dort ebenfalls eine runde gefaerbte Flaeche sitzt, faellt das nicht auf.
 proc esp_view {which} {
-    global cbmol cbopts
     esp_center
     switch -- $which {
         pi      { }
@@ -129,9 +133,6 @@ proc esp_view {which} {
                   puts "  transparenten Lagen - esp_opacity 1.0 oder"
                   puts "  esp_snapshot (Tachyon) gibt ein sauberes Bild." }
         default { puts "esp_view: pi | edge | sigma" ; return }
-    }
-    if {[info exists cbmol] && [lsearch [molinfo list] $cbmol] >= 0} {
-        eval esp_colorbar $cbopts
     }
     puts "Ansicht: $which"
 }
@@ -144,12 +145,9 @@ proc esp_iso {value} {
 }
 
 proc esp_range {half} {
-    global espmol REP_SURF RANGE cbmol
+    global espmol REP_SURF RANGE
     set RANGE $half
     mol scaleminmax $espmol $REP_SURF [expr {-1.0 * $half}] $half
-    if {[info exists cbmol] && [lsearch [molinfo list] $cbmol] >= 0} {
-        esp_colorbar
-    }
     puts "Farbskala: +/- $half a.u."
 }
 
@@ -159,81 +157,6 @@ proc esp_range {half} {
 proc esp_opacity {value} {
     _try material change opacity Transparent $value
     puts "Deckkraft: $value"
-}
-
-# VMD hat keine Legende. Der Balken wird in eine eigene, leere Molekuel-ID
-# gezeichnet und mit "mol fix" von der Maus abgekoppelt. Platziert wird er
-# relativ zum Molekuel in Angstroem - in geratenen Bildschirmkoordinaten haengt
-# das an Fenstergroesse und Zoom und landet lautlos ausserhalb des Bildes.
-# Argumente: Abstand zur Huellkugel (A), Balkenhoehe (A), Schriftgroesse.
-proc esp_colorbar {{gap 0.5} {barheight 0.7} {textsize 0.8}} {
-    global espmol RANGE cbmol cbopts
-    set cbopts [list $gap $barheight $textsize]
-
-    set sel [atomselect $espmol all]
-    set c  [measure center $sel]
-    set mm [measure minmax $sel]
-    $sel delete
-    set ex [expr {[lindex [lindex $mm 1] 0] - [lindex [lindex $mm 0] 0]}]
-    set ey [expr {[lindex [lindex $mm 1] 1] - [lindex [lindex $mm 0] 1]}]
-    set ez [expr {[lindex [lindex $mm 1] 2] - [lindex [lindex $mm 0] 2]}]
-    # Huellkugel statt Box, damit der Balken auch nach dem Drehen aussen bleibt.
-    set r  [expr {0.5 * sqrt($ex*$ex + $ey*$ey + $ez*$ez) + 1.8}]
-    set cx [lindex $c 0] ; set cy [lindex $c 1] ; set cz [lindex $c 2]
-    set hw [expr {0.85 * $r}]
-    set y0 [expr {$cy - $r - $gap}]
-    set y1 [expr {$y0 + $barheight}]
-    set x0 [expr {$cx - $hw}]
-
-    if {[info exists cbmol] && [lsearch [molinfo list] $cbmol] >= 0} {
-        graphics $cbmol delete all
-    } else {
-        mol new
-        set cbmol [molinfo top]
-        mol rename $cbmol colorbar
-    }
-    graphics $cbmol materials off   ;# Farben der Skala, nicht schattiert
-
-    set c0 [colorinfo num]              ;# die Skala belegt die IDs oberhalb
-    set c1 [expr {[colorinfo max] - 1}] ;# der benannten Farben
-    set nseg 64
-    set dx [expr {2.0 * $hw / $nseg}]
-    for {set i 0} {$i < $nseg} {incr i} {
-        graphics $cbmol color \
-            [expr {int($c0 + double($i) / ($nseg - 1) * ($c1 - $c0))}]
-        set xa [expr {$x0 + $i * $dx}]
-        set xb [expr {$xa + $dx}]
-        graphics $cbmol triangle "$xa $y0 $cz" "$xb $y0 $cz" "$xb $y1 $cz"
-        graphics $cbmol triangle "$xa $y0 $cz" "$xb $y1 $cz" "$xa $y1 $cz"
-    }
-
-    graphics $cbmol color black
-    set ty [expr {$y0 - 1.1 * $barheight}]
-    graphics $cbmol text "$x0 $ty $cz" [format "%.3f" [expr {-1.0*$RANGE}]] \
-        size $textsize thickness 2
-    graphics $cbmol text "[expr {$cx - 0.3}] $ty $cz" "0" \
-        size $textsize thickness 2
-    graphics $cbmol text "[expr {$cx + 0.45*$hw}] $ty $cz" \
-        [format "+%.3f" $RANGE] size $textsize thickness 2
-    graphics $cbmol text "[expr {$cx - 1.2}] [expr {$y1 + 0.4*$barheight}] $cz" \
-        "ESP / a.u." size $textsize thickness 2
-
-    # Gleiche Zentrierung und Skalierung wie das Molekuel, aber ohne dessen
-    # Rotation; mol fix koppelt zusaetzlich von der Maus ab.
-    molinfo $cbmol set center_matrix [list [transoffset [vecscale -1.0 $c]]]
-    molinfo $cbmol set rotate_matrix [list [transidentity]]
-    molinfo $cbmol set global_matrix [molinfo $espmol get global_matrix]
-    molinfo $cbmol set scale_matrix  [molinfo $espmol get scale_matrix]
-    mol fix $cbmol
-    mol top $espmol
-}
-
-proc esp_colorbar_off {} {
-    global cbmol
-    if {[info exists cbmol] && [lsearch [molinfo list] $cbmol] >= 0} {
-        mol delete $cbmol
-        unset cbmol
-    }
 }
 
 # Strahlverfolgt. Schnelle Alternative: render snapshot $name.png
@@ -262,7 +185,6 @@ _try material change shininess Transparent 0.300000
 
 # --- 5) Start -------------------------------------------------
 esp_view pi
-if {[catch {esp_colorbar} err]} { puts "! Farbbalken: $err" }
 
 puts ""
 puts "esp.tcl geladen. rho = $ISO a.u., Farbskala +/- $RANGE a.u.@@STATS@@"

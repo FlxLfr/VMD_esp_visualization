@@ -67,7 +67,7 @@ def find_vmd(explicit=None):
 
 
 def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
-            shadows=0):
+            shadows=0, snapshot=0, scene="esp.tcl", verbose=True):
     """Ein VMD-Lauf fuer die angegebenen Ansichten. Rueckgabe: (rc, renderer).
 
     Ein Absturz von VMD hinterlaesst keinen Fehlertext, nur fehlende Dateien -
@@ -82,7 +82,11 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
                  f"set ESP_AO {ao}\n"
                  f"set ESP_SHADOWS {shadows}\n"
                  f"set ESP_OPAQUE {opaque}\n"
+                 f"set ESP_SNAPSHOT {snapshot}\n"
                  f"set ESP_VIEWS {{{' '.join(views)}}}\n"
+                 # Szenendatei: im Normalfall esp.tcl, im Selbsttest
+                 # esp_check.tcl - so bleibt die committete Szene unberuehrt.
+                 "set ESP_SCENE {" + scene + "}\n"
                  # Geschweifte Klammern: Tcl substituiert darin nichts und
                  # Leerzeichen im Pfad ("2. Semester") stoeren nicht.
                  "source {" + tcl + "}\n")
@@ -97,7 +101,8 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
             fh.write(text)
         for line in text.splitlines():
             if line.startswith(("->", "!", "==", "Renderer:", "Fenster:")):
-                print("   ", line)
+                if verbose or line.startswith("!"):
+                    print("   ", line)
                 if line.startswith("Renderer:"):
                     renderer = line.split(":", 1)[1].strip()
         return out.returncode, renderer
@@ -108,11 +113,11 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
             os.remove("_render_opts.tcl")
 
 
-def read_scene():
-    """Isowert, Farbskala und die Kennzahlen aus esp.tcl bzw. tp.cube."""
+def read_scene(scene="esp.tcl"):
+    """Isowert, Farbskala und die Kennzahlen aus der Szene bzw. tp.cube."""
     iso, rng = 0.001, None
-    if os.path.exists("esp.tcl"):
-        text = open("esp.tcl", encoding="utf-8", errors="replace").read()
+    if os.path.exists(scene):
+        text = open(scene, encoding="utf-8", errors="replace").read()
         m = re.search(r"^set ISO\s+(\S+)", text, re.M)
         if m:
             iso = float(m.group(1))
@@ -179,9 +184,9 @@ def colorbar(path, rng, dpi=300):
 
 
 def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
-             shadows=False):
+             shadows=False, ao=False):
     lines = [
-        "Renderparameter (erzeugt von render_esp.py)",
+        "Renderparameter (erzeugt von render_espVMD.py)",
         "=" * 55,
         f"Molekuel          : {prefix}",
         f"Dichte-Cube       : td.cube",
@@ -189,12 +194,15 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
         f"Isowert rho       : {iso:g} a.u.",
     ]
     if stats:
-        vmin, vmax, _ = stats
+        # 3er-Tupel aus read_scene, 4er (mit Punktzahl) aus der Konvertierung
+        vmin, vmax = stats[0], stats[1]
+        npts = stats[3] if len(stats) > 3 else None
         lines += [
             f"V_S,min           : {vmin:+.5f} a.u. "
             f"({vmin * HARTREE_TO_KJ:+.1f} kJ/(mol*e))",
             f"V_S,max           : {vmax:+.5f} a.u. "
             f"({vmax * HARTREE_TO_KJ:+.1f} kJ/(mol*e))",
+            (f"Schalenpunkte     : {npts}" if npts else ""),
             "                    (Gitterpunkte auf der Schale, nicht "
             "interpoliert -",
             "                     zum Zitieren die Werte der PyMOL-Pipeline "
@@ -204,6 +212,7 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
         f"Farbskala         : {-rng:+.4f} .. {rng:+.4f} a.u.",
         f"Farbrampe         : RWB (rot negativ, blau positiv)",
         f"Schlagschatten    : {'an' if shadows else 'aus'}",
+        f"Umgebungsverdeck. : {'an' if ao else 'aus'}",
         f"Bildgroesse       : {size[0]} x {size[1]} px" if size
         else "Bildgroesse       : unbekannt",
         f"Renderer          : {renderer}",
@@ -218,7 +227,107 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
         f"Erzeugt           : {datetime.datetime.now():%Y-%m-%d %H:%M}",
     ]
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines) + "\n")
+        fh.write("\n".join(ln for ln in lines if ln) + "\n")
+
+
+def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
+               vmd=None, res="1600x1280", ao=False, shadows=False,
+               keep_tga=False, dpi=300, no_vmd=False, scene="esp.tcl",
+               verbose=True):
+    """Bildersatz fuer das AKTUELLE Verzeichnis. Erwartet die Szene und die Cubes.
+
+    Rueckgabe: dict mit made (Ansicht -> womit gerendert), renderer, size, rng,
+    iso, stats und den Pfaden. Von main() und von run_allVMD.py benutzt - die
+    Wiederholungslogik soll es nur einmal geben.
+    """
+    prefix = prefix or os.path.basename(os.path.abspath(os.getcwd()))
+    os.makedirs(outdir, exist_ok=True)
+    scene_iso, scene_rng, scene_stats = read_scene(scene)
+    iso = scene_iso if iso is None else iso
+    rng = rng if rng is not None else (scene_rng if scene_rng is not None
+                                       else (scene_stats[2] if scene_stats
+                                             else 0.035))
+    stats = stats if stats is not None else scene_stats
+    renderer = "TachyonInternal"
+
+    # Umgebungsverdeckung ist standardmaessig AUS, siehe --ao. Bleibt sie an,
+    # ist sie der erste Durchgang.
+    #
+    # Tachyon stirbt in der Achsenansicht gern an der Kombination aus vielen
+    # transparenten Lagen und Umgebungsverdeckung. Statt gleich alles
+    # herunterzuschrauben: erst in voller Qualitaet, dann nur die fehlenden
+    # Ansichten mit weniger. Was womit entstanden ist, steht in settings.txt.
+    passes = ([("AO + Transparenz", dict(ao=1, opaque=0, snapshot=0))]
+              if ao else []) + [
+        ("Transparenz", dict(ao=0, opaque=0, snapshot=0)),
+        # Tachyon steigt in der Achsenansicht an den vielen durchquerten
+        # transparenten Lagen aus. Der Fenstermitschnitt kennt keine
+        # Rekursion und behaelt die Transparenz - erst danach opak.
+        ("Transparenz, Fensterbild", dict(ao=0, opaque=0, snapshot=1)),
+        ("opak", dict(ao=0, opaque=1, snapshot=0))]
+    made = {}
+
+    if not no_vmd:
+        vmd = find_vmd(vmd)
+        if not vmd:
+            sys.exit("vmd nicht gefunden. Mit --vmd <pfad> angeben, oder den "
+                     "VMD-Ordner in den PATH aufnehmen (README Abschnitt 8).")
+        try:
+            w, h = res.lower().split("x")
+        except ValueError:
+            sys.exit("--res erwartet z.B. 1600x1280")
+        if verbose:
+            print(f"[1] VMD: {vmd}")
+
+        for label, opt in passes:
+            todo = [v for v in VIEWS if v not in made]
+            if not todo:
+                break
+            if label != passes[0][0] and verbose:
+                print(f"    Zweiter Anlauf fuer {', '.join(todo)}: {label}")
+            rc, used = run_vmd(vmd, outdir, prefix, todo, w, h,
+                                   opt["ao"], opt["opaque"], label,
+                                   shadows=1 if shadows else 0,
+                                   snapshot=opt["snapshot"], scene=scene,
+                                   verbose=verbose)
+            # Der Renderer des ERSTEN Durchgangs steht im Protokoll; womit eine
+            # nachgeholte Ansicht entstanden ist, sagt ihre eigene Zeile.
+            if label == passes[0][0]:
+                renderer = used
+            for v in todo:
+                if os.path.exists(os.path.join(outdir, f"{prefix}_{v}.tga")):
+                    made[v] = label
+            missing = [v for v in VIEWS if v not in made]
+            if missing and label == passes[-1][0]:
+                print(f"    ! nicht gerendert: {', '.join(missing)} "
+                      f"(VMD-Rueckgabewert {rc}). Protokoll: "
+                      f"{os.path.join(outdir, '_vmd.log')}", file=sys.stderr)
+
+    if verbose:
+        print("[2] TGA -> PNG")
+    done = tga_to_png(outdir, prefix, keep_tga=keep_tga)
+    for png, size in done:
+        if verbose:
+            print(f"    -> {png}  ({size[0]} x {size[1]} px)")
+    if not done and not no_vmd:
+        print("    ! keine TGA-Dateien gefunden - hat VMD gerendert?",
+              file=sys.stderr)
+
+    cb = os.path.join(outdir, f"{prefix}_colorbar.png")
+    colorbar(cb, rng, dpi=dpi)
+    if verbose:
+        print(f"[3] Farbskala -> {cb}  (+/- {rng:.4f} a.u.)")
+
+    st = os.path.join(outdir, f"{prefix}_settings.txt")
+    size = done[0][1] if done else None
+    settings(st, prefix, iso, rng, stats, size, renderer, made,
+             shadows=shadows, ao=ao)
+    if verbose:
+        print(f"[4] -> {st}")
+
+    return {"prefix": prefix, "made": made, "renderer": renderer, "size": size,
+            "rng": rng, "iso": iso, "stats": stats, "outdir": outdir,
+            "images": [p for p, _ in done], "colorbar": cb, "settings": st}
 
 
 def main(argv=None):
@@ -228,94 +337,40 @@ def main(argv=None):
                    help="VMD nicht aufrufen, nur TGA wandeln und Skala bauen")
     p.add_argument("--vmd", help="Pfad zu vmd.exe, falls nicht im PATH")
     p.add_argument("--res", default="1600x1280", help="Bildgroesse (Fenster)")
-    p.add_argument("--no-ao", action="store_true",
-                   help="Umgebungsverdeckung aus (schneller, flacher)")
+    p.add_argument("--ao", action="store_true",
+                   help="Umgebungsverdeckung an. Standard aus: sie legt weiche "
+                        "Schatten in die Vertiefungen, saeumt dabei aber auch "
+                        "die Staebchen als graue Doppelgaenger auf der "
+                        "Isoflaeche. PyMOL rendert ebenfalls ohne.")
     p.add_argument("--shadows", action="store_true",
                    help="Schlagschatten an. Standard aus: sie werfen die "
                         "Staebchen als graue Kapseln auf die Isoflaeche, was "
                         "wie ein Datenartefakt aussieht.")
     p.add_argument("--keep-tga", action="store_true")
+    p.add_argument("--dpi", type=int, default=300, help="Aufloesung der Skala")
     p.add_argument("--outdir", default="images")
+    p.add_argument("--scene", default="esp.tcl",
+                   help="Szenendatei im Molekuelordner (Standard esp.tcl; "
+                        "der Selbsttest benutzt esp_check.tcl)")
     args = p.parse_args(argv)
 
-    if not os.path.exists("esp.tcl"):
-        # esp.tcl kommt aus dem ersten Schritt, nicht von hier. Wenn die Cubes
-        # schon da sind, ist es mit --tcl-only in Sekundenbruchteilen zurueck.
+    if not os.path.exists(args.scene):
+        # Die Szene kommt aus dem ersten Schritt, nicht von hier. Wenn die
+        # Cubes schon da sind, ist sie mit --tcl-only in Sekundenbruchteilen
+        # zurueck.
         here = os.path.dirname(os.path.abspath(__file__))
         conv = os.path.join(here, "xyzToCubeToVMDVis.py")
         if os.path.exists("td.cube") and os.path.exists("tp.cube"):
-            sys.exit(f"esp.tcl fehlt, die Cubes sind aber da. Neu schreiben "
-                     f"mit:\n    python {conv} td.cube tp.cube --tcl-only")
-        sys.exit(f"esp.tcl nicht gefunden - aus dem Molekuelordner starten.\n"
-                 f"Erst konvertieren:\n"
+            sys.exit(f"{args.scene} fehlt, die Cubes sind aber da. Neu "
+                     f"schreiben mit:\n"
+                     f"    python {conv} td.cube tp.cube --tcl-only")
+        sys.exit(f"{args.scene} nicht gefunden - aus dem Molekuelordner "
+                 f"starten.\nErst konvertieren:\n"
                  f"    python {conv} --struct <struktur> td.xyz tp.xyz")
-    prefix = os.path.basename(os.path.abspath(os.getcwd()))
-    os.makedirs(args.outdir, exist_ok=True)
-    iso, rng, stats = read_scene()
-    if rng is None:
-        rng = stats[2] if stats else 0.035
-    renderer = "TachyonInternal"
 
-    # Tachyon stirbt in der Achsenansicht gern an der Kombination aus vielen
-    # transparenten Lagen und Umgebungsverdeckung. Statt gleich alles
-    # herunterzuschrauben: erst in voller Qualitaet, dann nur die fehlenden
-    # Ansichten mit weniger. Was womit entstanden ist, steht in settings.txt.
-    passes = [("AO + Transparenz", dict(ao=1, opaque=0)),
-              ("ohne AO", dict(ao=0, opaque=0)),
-              ("ohne AO, opak", dict(ao=0, opaque=1))]
-    made = {}
-
-    if not args.no_vmd:
-        vmd = find_vmd(args.vmd)
-        if not vmd:
-            sys.exit("vmd nicht gefunden. Mit --vmd <pfad> angeben, oder den "
-                     "VMD-Ordner in den PATH aufnehmen (README Abschnitt 8).")
-        try:
-            w, h = args.res.lower().split("x")
-        except ValueError:
-            sys.exit("--res erwartet z.B. 1600x1280")
-        if args.no_ao:
-            passes = passes[1:]
-        print(f"[1] VMD: {vmd}")
-
-        for label, opt in passes:
-            todo = [v for v in VIEWS if v not in made]
-            if not todo:
-                break
-            if label != passes[0][0]:
-                print(f"    Zweiter Anlauf fuer {', '.join(todo)}: {label}")
-            rc, renderer = run_vmd(vmd, args.outdir, prefix, todo, w, h,
-                                   opt["ao"], opt["opaque"], label,
-                                   shadows=1 if args.shadows else 0)
-            for v in todo:
-                if os.path.exists(os.path.join(args.outdir,
-                                               f"{prefix}_{v}.tga")):
-                    made[v] = label
-            missing = [v for v in VIEWS if v not in made]
-            if missing and label == passes[-1][0]:
-                print(f"    ! nicht gerendert: {', '.join(missing)} "
-                      f"(VMD-Rueckgabewert {rc}). Protokoll: "
-                      f"{os.path.join(args.outdir, '_vmd.log')}",
-                      file=sys.stderr)
-
-    print("[2] TGA -> PNG")
-    done = tga_to_png(args.outdir, prefix, keep_tga=args.keep_tga)
-    for png, size in done:
-        print(f"    -> {png}  ({size[0]} x {size[1]} px)")
-    if not done:
-        print("    ! keine TGA-Dateien gefunden - hat VMD gerendert?",
-              file=sys.stderr)
-
-    print("[3] Farbskala")
-    cb = os.path.join(args.outdir, f"{prefix}_colorbar.png")
-    colorbar(cb, rng)
-    print(f"    -> {cb}  (+/- {rng:.4f} a.u.)")
-
-    st = os.path.join(args.outdir, f"{prefix}_settings.txt")
-    settings(st, prefix, iso, rng, stats,
-             done[0][1] if done else None, renderer, made,
-             shadows=args.shadows)
-    print(f"[4] -> {st}")
+    render_all(outdir=args.outdir, vmd=args.vmd, res=args.res,
+               ao=args.ao, shadows=args.shadows, scene=args.scene,
+               keep_tga=args.keep_tga, dpi=args.dpi, no_vmd=args.no_vmd)
     return 0
 
 
