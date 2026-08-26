@@ -338,8 +338,14 @@ def main(argv=None):
     g.add_argument("--scale", default="auto", help="Zoom, Zahl oder 'auto'")
     g.add_argument("--fill", type=float, default=0.85,
                    help="Anteil der Bildhoehe fuer das Molekuel bei --scale auto")
-    g.add_argument("--color-scale", default="RWB",
-                   help="VMD-Farbskala (RWB = rot negativ)")
+    g.add_argument("--color-scale", default=None,
+                   help="VMD-Farbskala, Standard RWB (rot negativ); "
+                        "mit --rainbow RGB")
+    g.add_argument("--rainbow", action="store_true",
+                   help="Regenbogenrampe statt rot-weiss-blau. Schreibt "
+                        "esp_rainbow.tcl und einen eigenen Bildersatz "
+                        "<molekuel>_rainbow_*, der Standardsatz bleibt "
+                        "erhalten.")
 
     g = p.add_argument_group("Rendern")
     g.add_argument("--no-render", action="store_true",
@@ -375,9 +381,17 @@ def main(argv=None):
     # eigene Szenendatei, eigene CSV. Sonst laesst sich hinterher nicht mehr
     # sagen, ob die Referenz noch die Referenz ist.
     is_reference = os.path.abspath(args.root) == os.path.abspath(DEFAULT_ROOT)
-    scene_name = "esp_check.tcl" if is_reference else "esp.tcl"
+    # Eigener Szenenname pro Rampe, sonst ueberschreibt ein Regenbogenlauf die
+    # Szene des rot-weiss-blauen Laufs - die Bilder liegen aus demselben Grund
+    # getrennt (<molekuel>_rainbow_*).
+    scene_name = ("esp_check" if is_reference else "esp") \
+        + ("_rainbow" if args.rainbow else "") + ".tcl"
     if args.images_dir is None:
         args.images_dir = "images_check" if is_reference else "images"
+    # RGB ist VMDs Regenbogen: rot - gruen - blau, dieselbe Richtung wie die
+    # Rampe der PyMOL-Pipeline. Ein ausdrueckliches --color-scale gewinnt.
+    if args.color_scale is None:
+        args.color_scale = "RGB" if args.rainbow else "RWB"
 
     # Vor dem ersten chdir absolut machen: das Rendern laeuft im Molekuelordner,
     # ein relativer Pfad zeigte dort woandershin.
@@ -455,7 +469,7 @@ def main(argv=None):
 
     # --- Schritt 2: Szene und Bilder ---------------------------------------
     print("\n" + "-" * 70)
-    print("Schritt 2: esp.tcl schreiben" +
+    print(f"Schritt 2: {scene_name} schreiben" +
           ("" if args.no_render else " und rendern"))
     print("-" * 70)
 
@@ -498,8 +512,8 @@ def main(argv=None):
                     outdir=args.images_dir, prefix=name, iso=args.iso,
                     rng=rng, stats=e["stats"], vmd=args.vmd, res=args.res,
                     ao=args.ao, shadows=args.shadows, scene=scene_name,
-                    headless=args.headless, keep_tga=args.keep_tga,
-                    dpi=args.dpi, verbose=True)
+                    headless=args.headless, rainbow=args.rainbow,
+                    keep_tga=args.keep_tga, dpi=args.dpi, verbose=True)
             finally:
                 os.chdir(cwd)
             row.update(made=res["made"], size=res["size"],

@@ -175,12 +175,19 @@ def tga_to_png(outdir, prefix, keep_tga=False):
     return done
 
 
-def colorbar(path, rng, dpi=300):
+def colorbar(path, rng, dpi=300, rainbow=False):
     """Waagerechte Farbskala als eigenes PNG.
 
     Rot-weiss-blau in derselben Reihenfolge wie VMDs Farbskala RWB, damit der
     Balken zu den Bildern passt - und zur PyMOL-Variante, die dieselbe Rampe
     benutzt.
+
+    Der Regenbogenbalken bildet VMDs Skala RGB nach: rot - gruen - blau, linear
+    dazwischen. Das ergibt bei der Haelfte olivgelb und bei drei Vierteln
+    petrol, waehrend die PyMOL-Rampe fuenf Stuetzstellen hat und dort reines
+    Gelb und Cyan zeigt. Der Balken folgt bewusst VMD und nicht PyMOL: er ist
+    die Legende zu DIESEM Bild. Die Skalenbreite ist in beiden Projekten
+    dieselbe, nur die Zwischentoene sind etwas dunkler.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -188,7 +195,8 @@ def colorbar(path, rng, dpi=300):
     from matplotlib.colors import LinearSegmentedColormap, Normalize
     from matplotlib.colorbar import ColorbarBase
 
-    cmap = LinearSegmentedColormap.from_list("rwb", ["red", "white", "blue"])
+    cmap = LinearSegmentedColormap.from_list(
+        "esp", ["red", "green", "blue"] if rainbow else ["red", "white", "blue"])
     fig = plt.figure(figsize=(6.0, 1.0))
     ax = fig.add_axes([0.06, 0.42, 0.88, 0.30])
     cb = ColorbarBase(ax, cmap=cmap, norm=Normalize(-rng, rng),
@@ -201,7 +209,7 @@ def colorbar(path, rng, dpi=300):
 
 
 def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
-             shadows=False, ao=False):
+             shadows=False, ao=False, rainbow=False):
     lines = [
         "Renderparameter (erzeugt von render_espVMD.py)",
         "=" * 55,
@@ -227,7 +235,9 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
         ]
     lines += [
         f"Farbskala         : {-rng:+.4f} .. {rng:+.4f} a.u.",
-        f"Farbrampe         : RWB (rot negativ, blau positiv)",
+        (f"Farbrampe         : RGB (Regenbogen: rot negativ, gruen null, "
+         f"blau positiv)" if rainbow else
+         f"Farbrampe         : RWB (rot negativ, weiss null, blau positiv)"),
         f"Schlagschatten    : {'an' if shadows else 'aus'}",
         f"Umgebungsverdeck. : {'an' if ao else 'aus'}",
         f"Bildgroesse       : {size[0]} x {size[1]} px" if size
@@ -249,8 +259,8 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
 
 def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                vmd=None, res="1600x1280", ao=False, shadows=False,
-               keep_tga=False, dpi=300, no_vmd=False, scene="esp.tcl",
-               headless=False, verbose=True):
+               keep_tga=False, dpi=300, no_vmd=False, scene=None,
+               headless=False, rainbow=False, verbose=True):
     """Bildersatz fuer das AKTUELLE Verzeichnis. Erwartet die Szene und die Cubes.
 
     Rueckgabe: dict mit made (Ansicht -> womit gerendert), renderer, size, rng,
@@ -258,6 +268,11 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     Wiederholungslogik soll es nur einmal geben.
     """
     prefix = prefix or os.path.basename(os.path.abspath(os.getcwd()))
+    # Eigener Namensanhang und eigene Szene, sonst ueberschreibt ein
+    # Regenbogenlauf den rot-weiss-blauen Bildersatz desselben Molekuels.
+    # prefix bleibt der Molekuelname, out_prefix benennt die Dateien.
+    scene = scene or ("esp_rainbow.tcl" if rainbow else "esp.tcl")
+    out_prefix = f"{prefix}_rainbow" if rainbow else prefix
     os.makedirs(outdir, exist_ok=True)
     scene_iso, scene_rng, scene_stats = read_scene(scene)
     iso = scene_iso if iso is None else iso
@@ -317,7 +332,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
             # Zeitmarke vor dem Lauf: eine TGA aus einem frueheren, abgestuerzten
             # Durchgang liegt sonst noch da und wuerde als Erfolg gezaehlt.
             t0 = time.time() - 1.0
-            rc, used = run_vmd(vmd, outdir, prefix, todo, w, h,
+            rc, used = run_vmd(vmd, outdir, out_prefix, todo, w, h,
                                    opt["ao"], opt["opaque"], label,
                                    shadows=1 if shadows else 0,
                                    snapshot=opt["snapshot"], scene=scene,
@@ -327,7 +342,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
             if label == passes[0][0]:
                 renderer = used
             for v in todo:
-                tga = os.path.join(outdir, f"{prefix}_{v}.tga")
+                tga = os.path.join(outdir, f"{out_prefix}_{v}.tga")
                 if os.path.exists(tga) and os.path.getmtime(tga) >= t0:
                     made[v] = label
             missing = [v for v in VIEWS if v not in made]
@@ -338,7 +353,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
 
     if verbose:
         print("[2] TGA -> PNG")
-    done = tga_to_png(outdir, prefix, keep_tga=keep_tga)
+    done = tga_to_png(outdir, out_prefix, keep_tga=keep_tga)
     for png, size in done:
         if verbose:
             print(f"    -> {png}  ({size[0]} x {size[1]} px)")
@@ -346,15 +361,15 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
         print("    ! keine TGA-Dateien gefunden - hat VMD gerendert?",
               file=sys.stderr)
 
-    cb = os.path.join(outdir, f"{prefix}_colorbar.png")
-    colorbar(cb, rng, dpi=dpi)
+    cb = os.path.join(outdir, f"{out_prefix}_colorbar.png")
+    colorbar(cb, rng, dpi=dpi, rainbow=rainbow)
     if verbose:
         print(f"[3] Farbskala -> {cb}  (+/- {rng:.4f} a.u.)")
 
-    st = os.path.join(outdir, f"{prefix}_settings.txt")
+    st = os.path.join(outdir, f"{out_prefix}_settings.txt")
     size = done[0][1] if done else None
     settings(st, prefix, iso, rng, stats, size, renderer, made,
-             shadows=shadows, ao=ao)
+             shadows=shadows, ao=ao, rainbow=rainbow)
     if verbose:
         print(f"[4] -> {st}")
 
@@ -387,10 +402,16 @@ def main(argv=None):
                         "rendert weiter, der Fenstermitschnitt nicht - er wird "
                         "nur noch geholt, wenn Tachyon eine Ansicht nicht "
                         "schafft.")
-    p.add_argument("--scene", default="esp.tcl",
-                   help="Szenendatei im Molekuelordner (Standard esp.tcl; "
-                        "der Selbsttest benutzt esp_check.tcl)")
+    p.add_argument("--rainbow", action="store_true",
+                   help="Regenbogenrampe: rendert esp_rainbow.tcl und schreibt "
+                        "<prefix>_rainbow_*, der Standardsatz bleibt erhalten")
+    p.add_argument("--scene", default=None,
+                   help="Szenendatei im Molekuelordner (Standard esp.tcl, mit "
+                        "--rainbow esp_rainbow.tcl; der Selbsttest benutzt "
+                        "esp_check.tcl)")
     args = p.parse_args(argv)
+    if args.scene is None:
+        args.scene = "esp_rainbow.tcl" if args.rainbow else "esp.tcl"
 
     if not os.path.exists(args.scene):
         # Die Szene kommt aus dem ersten Schritt, nicht von hier. Wenn die
@@ -408,8 +429,8 @@ def main(argv=None):
 
     render_all(outdir=args.outdir, vmd=args.vmd, res=args.res,
                ao=args.ao, shadows=args.shadows, scene=args.scene,
-               headless=args.headless, keep_tga=args.keep_tga,
-               dpi=args.dpi, no_vmd=args.no_vmd)
+               headless=args.headless, rainbow=args.rainbow,
+               keep_tga=args.keep_tga, dpi=args.dpi, no_vmd=args.no_vmd)
     return 0
 
 

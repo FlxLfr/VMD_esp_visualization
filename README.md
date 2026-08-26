@@ -232,7 +232,8 @@ not from the file name. Expect a minute or two per grid.
 | `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
 | `--scale` | `auto` | zoom, a number or `auto` — from the molecule's size and the window height. |
 | `--fill` | `0.85` | fraction of the image height the molecule fills at `--scale auto`. |
-| `--color-scale` | `RWB` | VMD colour scale. `RWB` is red-negative; `BWR` reverses it. |
+| `--color-scale` | `RWB` (`RGB` with `--rainbow`) | VMD colour scale. `RWB` is red-negative; `BWR` reverses it. An explicit value wins over `--rainbow`. |
+| `--rainbow` | off | rainbow ramp instead of red–white–blue; writes `esp_rainbow.tcl` so the standard scene survives. |
 
 #### Examples
 
@@ -248,6 +249,9 @@ python xyzToCubeToVMDVis.py --struct mol.xyz --struct-unit bohr --outdir ../out 
 
 # change the scene only, from cubes that already exist
 python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --esp-range 0.035 --opacity 1.0
+
+# second scene with the rainbow ramp, the standard one is kept
+python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --rainbow
 ```
 
 **Never re-run the conversion just to change the scene.** Converting takes
@@ -345,7 +349,8 @@ principal axis instead; read the file name as "axial view" in that case.
 | Option | Default | Effect |
 |---|---|---|
 | `--outdir` | `images` | output folder |
-| `--scene` | `esp.tcl` | scene file to render; the smoke test uses `esp_check.tcl` |
+| `--scene` | `esp.tcl` (`esp_rainbow.tcl` with `--rainbow`) | scene file to render; the smoke test uses `esp_check.tcl` |
+| `--rainbow` | off | render the rainbow scene into a separate `<prefix>_rainbow_*` set |
 | `--res` | `1600x1280` | image size in px |
 | `--headless` | off | start VMD without a window (`-dispdev text`) — see below |
 | `--ao` | off | ambient occlusion: soft shadows in the recesses, slower |
@@ -363,6 +368,9 @@ python ../../scripts/render_espVMD.py
 
 # no window, full resolution, deeper shading
 python ../../scripts/render_espVMD.py --headless --res 2400x1920 --ao
+
+# second image set with the rainbow ramp, standard set kept
+python ../../scripts/render_espVMD.py --rainbow
 
 # only rebuild the colour bar, do not touch VMD
 python ../../scripts/render_espVMD.py --no-vmd
@@ -389,6 +397,22 @@ removes it: the window appears only when Tachyon has already failed.
 
 **The colour bar comes from matplotlib, not from VMD.** VMD has no legend object,
 and neither has PyMOL, so both pipelines draw it the same way, as a separate PNG.
+
+**On `--rainbow`.** It selects VMD's `RGB` scale: smallest value red, middle
+green, largest blue — the same direction as the PyMOL ramp, so the two rainbow
+sets read the same way round. They do not look identical, though. VMD
+interpolates linearly between three anchor colours, so a quarter of the way up
+you get olive rather than yellow and three quarters of the way up teal rather
+than cyan; PyMOL's ramp has five anchors and shows those tones pure. Endpoints,
+the zero point and the width of the scale are the same in both. The colour bar
+follows VMD rather than PyMOL, because it is the legend for *this* picture — the
+rainbow bar is correspondingly darker in the middle than its PyMOL counterpart.
+
+Rainbow output never collides with the standard set: the scene is
+`esp_rainbow.tcl`, the images are `<prefix>_rainbow_pi.png` and so on. Use it as
+a second, alternative set — red–white–blue stays the one to publish, because a
+rainbow ramp has no perceptually neutral midpoint and invites reading structure
+into the intermediate colours that is not in the data.
 
 ---
 
@@ -452,7 +476,8 @@ small and the run says so: which molecules it clips, and what they would need.
 | `--iso` | `0.001` | density isovalue, passed through |
 | `--opacity` | `0.50` | passed through |
 | `--scale`, `--fill` | `auto`, `0.85` | zoom, passed through |
-| `--color-scale` | `RWB` | passed through |
+| `--color-scale` | `RWB` (`RGB` with `--rainbow`) | passed through |
+| `--rainbow` | off | rainbow ramp; writes `esp_rainbow.tcl` and a separate `<molecule>_rainbow_*` set |
 | `--no-render` | off | convert and write the scene only |
 | `--headless` | off | start VMD without a window |
 | `--res` | `1600x1280` | passed through |
@@ -475,6 +500,9 @@ python run_allVMD.py --root ../sandbox --only "*benzol"
 
 # match the PyMOL figures exactly: take the value from their summary.csv
 python run_allVMD.py --root ../sandbox --esp-range 0.035
+
+# second image set with the rainbow ramp, standard set kept
+python run_allVMD.py --root ../sandbox --headless --rainbow --esp-range 0.0700
 
 # convert and write the scenes, render later
 python run_allVMD.py --root ../sandbox --no-render
@@ -504,6 +532,10 @@ Per molecule folder:
 | `images/<prefix>_colorbar.png` | `render_espVMD.py` | the colour scale as a separate figure |
 | `images/<prefix>_settings.txt` | `render_espVMD.py` | **every parameter used**, plus the measured surface ESP values and which pass produced each view. Keep it next to the figures — it is the record of how they were made. |
 | `images/_vmd.log` | `render_espVMD.py` | VMD's full console output, appended per pass. The place to look when a view is missing: a VMD crash leaves no error text, only an absent file. |
+
+With `--rainbow` the same names appear with `_rainbow` inserted
+(`<prefix>_rainbow_pi.png`, `esp_rainbow.tcl`, …), so a rainbow run never
+overwrites the standard set.
 
 The smoke test writes the same files under `_check` names (`esp_check.tcl`,
 `images_check/`, `summary_check.csv`) so it can never overwrite the committed
@@ -668,11 +700,10 @@ it runs.
 The values that both do report agree to every digit on the shared reference
 dataset, which is what §1.3 checks.
 
-**Figure options.** PyMOL offers a rainbow ramp as an alternative colour map
-(`--rainbow`, written as a separate image set so the standard one survives),
+**Figure options.** Both pipelines have `--rainbow`. PyMOL additionally offers
 several background colours in one run (`--backgrounds white black`), rendering a
 subset of the views (`--views pi sigma`), and an explicit margin around the
-molecule (`--buffer`). None of those exist here.
+molecule (`--buffer`). None of those three exist here.
 
 **Workflow.** PyMOL has `--two-pass`, which renders once to find the common
 colour scale and again to use it. Here that is a printed recommendation and a

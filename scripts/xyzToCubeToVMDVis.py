@@ -650,8 +650,20 @@ def main(argv=None):
     g.add_argument("--fill", type=float, default=0.85,
                    help="Anteil der Fensterhoehe fuer das Molekuel bei "
                         "--scale auto (Standard 0.85)")
-    g.add_argument("--color-scale", default="RWB", help="RWB = rot negativ")
+    g.add_argument("--color-scale", default=None,
+                   help="VMD-Farbskala, Standard RWB (rot negativ); "
+                        "mit --rainbow RGB")
+    g.add_argument("--rainbow", action="store_true",
+                   help="Regenbogenrampe statt rot-weiss-blau. Schreibt "
+                        "esp_rainbow.tcl, damit die Standardszene erhalten "
+                        "bleibt.")
     args = p.parse_args(argv)
+
+    # RGB ist VMDs Regenbogen: kleinster Wert rot, Mitte gruen, groesster blau -
+    # dieselbe Richtung wie die Rampe der PyMOL-Pipeline. Ein ausdrueckliches
+    # --color-scale gewinnt, sonst waere die Option neben --rainbow wirkungslos.
+    if args.color_scale is None:
+        args.color_scale = "RGB" if args.rainbow else "RWB"
 
     verbose = not args.quiet
     if args.tcl_only and args.no_vmd:
@@ -748,7 +760,9 @@ def main(argv=None):
     else:
         rng = float(args.esp_range)
 
-    tcl = os.path.join(outdir, "esp.tcl")
+    # Eigener Dateiname, sonst ueberschreibt ein Regenbogenlauf die Szene des
+    # rot-weiss-blauen Laufs - die Bilder liegen aus demselben Grund getrennt.
+    tcl = os.path.join(outdir, "esp_rainbow.tcl" if args.rainbow else "esp.tcl")
     write_vmd_script(tcl, os.path.basename(cubes["density"]),
                      os.path.basename(cubes["esp"]), rng, stats, iso=args.iso,
                      opacity=args.opacity,

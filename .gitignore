@@ -40,7 +40,9 @@ vmdscene*
 snapshot*.png
 .vmdsession
 # The per-molecule scene script is generated, not authored - like esp.pml was.
-**/esp.tcl
+# esp*.tcl catches esp.tcl, esp_rainbow.tcl and the smoke test's _check
+# variants; the templates under scripts/ are pulled back in below.
+**/esp*.tcl
 !scripts/**/*.tcl
 
 # Scratch space for experiments and large intermediate files
