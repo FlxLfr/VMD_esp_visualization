@@ -1,192 +1,427 @@
 # ESP Visualization — VMD
 
-**A lean, independent rendering path for molecular electrostatic potentials,
-built on VMD.**
+**User Guide for deploying the VMD ESP Visualization Tool**
 
-| | |
+This repository is the continuation of
+[`Pymol_esp_visualization`](https://github.com/FlxLfr/Pymol_esp_visualization).
+It is a **visualisation tool only**: it turns Turbomole `pointval` output into
+the same standard set of ESP figures, drawn in VMD instead of PyMOL.
+
+> **The σ-hole potential is computed in the PyMOL project, not here.** Locating
+> the σ-hole maximum needs trilinear interpolation onto the isosurface, and that
+> code is written, parameter-studied and documented over there. This pipeline
+> computes only V_S,min and V_S,max on the ρ = 0.001 a.u. shell, because without
+> them there is no colour scale and therefore no meaningful picture. **Quote the
+> PyMOL numbers.** The ones here size a colour bar. What else the sister project
+> can do is listed in [section 9](#9-what-the-pymol-pipeline-does-and-this-one-does-not).
+
+| Aspect | Details |
 |---|---|
 | Input | Turbomole `pointval` grids (`td.xyz`, `tp.xyz`) + a structure file |
-| Output | cube files, a ready-to-run VMD scene (`esp.tcl`), the image set in `images/` |
-| Software | VMD 1.9.4 + Python 3 + NumPy, all free |
-| Sister project | [`Pymol_esp_visualization`](https://github.com/FlxLfr/Pymol_esp_visualization) — the PyMOL pipeline |
+| Output | Gaussian cube files, a ready-to-run VMD scene (`esp.tcl`), a standard set of PNG images, a CSV of surface ESP statistics |
+| Software | Python 3 + NumPy + VMD 1.9.4, all free |
+| Manual steps | Installing VMD, establishing a conda environment and firing a command |
 
-> **This project visualises.** It computes V_S,min and V_S,max, because without
-> them there is no colour scale and therefore no meaningful picture. It does not
-> compute the σ-hole potential and does not interpolate onto the isosurface —
-> those live in the PyMOL pipeline. See
-> [section 3](#3-scope-what-is-deliberately-missing).
+<p align="center">
+  <img src="reference/brombenzol/images/brombenzol_pi.png" width="32%" alt="pi face">
+  <img src="reference/brombenzol/images/brombenzol_sigma.png" width="32%" alt="sigma hole">
+  <img src="reference/brombenzol/images/brombenzol_edge.png" width="32%" alt="in-plane profile">
+</p>
+<p align="center">
+  <img src="reference/brombenzol/images/brombenzol_colorbar.png" width="42%" alt="colour scale">
+</p>
+
+<p align="center"><em>Bromobenzene: π face, view along the C–Br axis (σ-hole), in-plane profile, and the colour scale that belongs to them. These are the committed reference images, rendered from the decimated reference grid.</em></p>
 
 ---
 
 ## Contents
 
-1. [Why a second pipeline](#1-why-a-second-pipeline)
-2. [What changes when the viewer changes](#2-what-changes-when-the-viewer-changes)
-3. [Scope: what is deliberately missing](#3-scope-what-is-deliberately-missing)
-4. [Usage](#4-usage)
-5. [Installation](#5-installation)
-6. [Roadmap](#6-roadmap)
-7. [Repository layout](#7-repository-layout)
-8. [Notes and troubleshooting](#8-notes-and-troubleshooting)
+1. [Installation](#1-installation)
+    - [1.1 Prerequisite: VMD](#11-prerequisite-vmd)
+    - [1.2 Create the environment](#12-create-the-environment)
+    - [1.3 Verify & Smoketest](#13-verify--smoketest)
+2. [Input files and formats](#2-input-files-and-formats)
+3. [One molecule, step by step](#3-one-molecule-step-by-step)
+    - [3.1 Convert the grids to cubes and create the VMD scene (`xyzToCubeToVMDVis.py`)](#31-convert-the-grids-to-cubes-and-create-the-vmd-scene-xyztocubetovmdvispy)
+    - [3.2 Look at it interactively (`esp.tcl`)](#32-look-at-it-interactively-esptcl)
+    - [3.3 Render the standard image set (`render_espVMD.py`)](#33-render-the-standard-image-set-render_espvmdpy)
+4. [Several molecules at once (`run_allVMD.py`)](#4-several-molecules-at-once-run_allvmdpy)
+5. [What the workflow writes](#5-what-the-workflow-writes)
+6. [Console output](#6-console-output)
+7. [Create Tp.xyz, Td.xyz and a structure file from a SMILES notation](#7-create-tpxyz-tdxyz-and-a-structure-file-from-a-smiles-notation)
+8. [Repository layout](#8-repository-layout)
+9. [What the PyMOL pipeline does and this one does not](#9-what-the-pymol-pipeline-does-and-this-one-does-not)
+
+Everything that is background rather than instruction — why a second pipeline
+exists at all, how the two viewers differ mechanically, the choice of VMD
+version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
 
 ---
 
-## 1. Why a second pipeline
+## 1. Installation
 
-The PyMOL workflow is finished and does what it was built for: it turns
-Turbomole `pointval` output into a reproducible, publication-quality picture of
-the ESP on the ρ = 0.001 a.u. density isosurface, and it reports the numbers that
-belong to that picture.
+### 1.1 Prerequisite: VMD
 
-There are two reasons to do the picture again in VMD.
+Download from the
+[TCBG test release page](https://www.ks.uiuc.edu/Research/vmd/alpha/) (free
+registration) and take **Version 1.9.4, "Windows 64-bit, CUDA, OptiX, OSPray"**.
+The page labels it "Windows 10"; that is the tested minimum, not an upper limit,
+and it runs on Windows 11 natively. Version 2.0.0 exists as a monthly alpha and
+is deliberately not used here — see `docs/Details.docx`.
 
-**The practical one.** The large majority of published ESP figures in this field
-are made with VMD. A workflow is only adopted if it speaks the tool its intended
-users already have open, and a figure is only comparable to the literature if it
-can be produced the way the literature produced it. A pipeline that exists only
-for PyMOL asks every reader to switch software before they can use it.
+VMD is not a conda package and the Windows installer does **not** put it on the
+`PATH`. The scripts find it anyway: they check the `PATH`, then the `VMDDIR`
+environment variable that the installer does set, then the usual install
+folders. Only if all three fail do you need `--vmd "C:\Program Files\VMD\vmd.exe"`
+or a `PATH` entry — the PowerShell snippet for that is in `docs/Details.docx`.
 
-**The methodological one.** Two independent viewers reading the *same* cube files
-are a control on each other. Isosurface extraction, interpolation of the
-potential onto that surface, and the mapping of values to colour are all
-implementation details, and every one of them can change what a figure shows. If
-the same data at the same isovalue on the same colour scale produces the same
-picture in both, that agreement is evidence that the figure shows a property of
-the quantum-chemical data rather than an artefact of one renderer. If the two
-disagree, the disagreement is itself worth reporting — and a single-viewer study
-would never have surfaced it.
+### 1.2 Create the environment
 
-That makes this repository more than a port. The comparison is part of the
-result.
-
----
-
-## 2. What changes when the viewer changes
-
-| | PyMOL | VMD |
-|---|---|---|
-| Scene language | Python / `.pml` | Tcl / `.tcl` |
-| ESP on surface | `ramp_new` + `set surface_color` | second volumetric dataset via `mol addfile`, `Isosurface` rep coloured by `Volume` |
-| Colour scale | ramp with explicit min/max | `color scale method RWB` + `mol scaleminmax` |
-| Structure file | loaded separately | not needed — the cube carries the atoms |
-| Batch mode | `pymol -cq script.py --` | `vmd -dispdev text -e script.tcl` |
-| Renderer | built-in ray tracer | Tachyon / TachyonLOptiXInternal |
-
-The essential mechanic is the second row: **VMD has no ramp object.** Both grids
-are loaded into the *same* molecule ID — the density first, the potential as an
-additional volumetric dataset — and the isosurface drawn from volume 0 is then
-coloured by the values of volume 1. Everything else follows from that.
-
-The fourth row is a quiet win. In PyMOL the structure file is a second source of
-coordinates, and if its units disagree with the grid, the molecule floats next to
-its own surface. A cube file carries its atom block in Bohr alongside the grid,
-so in VMD there is only one source and nothing to misalign.
-
----
-
-## 3. Scope: what is deliberately missing
-
-The line runs between *what the picture needs* and *what the study reports*.
-
-**Computed here:** V_S,min and V_S,max on the ρ = 0.001 a.u. shell, and the
-symmetric colour range rounded up from them. Without those there is no colour
-scale, and a picture with an arbitrary scale is not a result. `--esp-range auto`
-is the default; a number overrides it.
-
-The values come from **grid points near the shell**, not from an interpolated
-surface, and no σ-hole is located. That is the deliberate cut: locating the
-σ-hole maximum needs trilinear interpolation onto the isosurface, and that code
-is already written, parameter-studied and documented in the PyMOL project. A
-second implementation here would be a duplicate nobody notices drifting until
-two chapters of the same thesis quote different numbers for the same molecule.
-**Quote the PyMOL numbers.** The ones here size a colour bar.
-
-The two agree where they overlap. On the committed reference dataset
-(4-bromoacetophenone) this pipeline finds 173 shell points,
-V_S,min = −0.06379 a.u., V_S,max = +0.04693 a.u., range ±0.0650 — identical to
-every digit in the PyMOL project's `reference/summary.csv`.
-
-The computed values are stamped into the first line of `tp.cube`, so
-`--tcl-only` recovers them without re-reading a 200 MB grid.
-
-What is carried over unchanged, so the two image sets can be laid side by side:
-
-* **The surface.** ρ = 0.001 a.u. electron-density isosurface (Politzer/Murray).
-* **The colour convention.** Red negative, blue positive, white at zero.
-* **The three views.** π face, in-plane edge, σ-hole along the C–X axis.
-* **`reference/` is committed and not edited; `sandbox/` is ignored.**
-
----
-
-## 4. Usage
+This assumes a working conda; if you have none, follow §1.1 of the PyMOL
+project's README first — it is the same installation.
 
 ```bash
-python scripts/xyzToCubeToVMDVis.py --struct <structure> td.xyz tp.xyz [options]
+conda env create -f environment.yml
+conda activate esp-vmd
+```
+
+| Packages inside the env | Needed for |
+|---|---|
+| `numpy` | everything, grid handling in all scripts |
+| `matplotlib` | the separate `*_colorbar.png` only |
+| `pillow` | converting VMD's TGA output to PNG |
+
+The `esp-pymol` environment from the sister project works just as well — it
+already has all three, and VMD does not come from conda either way.
+
+### 1.3 Verify & Smoketest
+
+Validate the correct deployment of the conda environment:
+
+```bash
+python -c "import numpy, matplotlib, PIL; print('ok')"
+```
+
+The smoke test is run by executing the batch script without any parameters:
+
+```bash
+cd scripts
+python run_allVMD.py
+```
+
+Without parameters `run_allVMD.py` runs on `reference/brombenzol/`. It converts,
+writes the scene, renders, and puts the images in
+`reference/brombenzol/images_check/` plus a summary in
+`reference/summary_check.csv`. The `_check` names are deliberate: the smoke test
+must never overwrite the committed reference files, otherwise you can no longer
+tell whether the reference is still the reference.
+
+Compare your `images_check/` with the committed `images/` and your
+`summary_check.csv` with `summary.csv`. On the decimated reference grid expect:
+
+| | |
+|---|---|
+| V_S,min | −0.01863 a.u. |
+| V_S,max | +0.03070 a.u. |
+| colour scale | ±0.0350 a.u. |
+| shell points | 313 |
+
+**These are the same numbers the PyMOL pipeline reports.** Both reference sets
+are built from the same bromobenzene data with the same parameters, and both
+derive V_S from grid points near the ρ = 0.001 shell. That is the point of the
+test: it cross-checks the two pipelines, not just this one. If your numbers
+match, the installation is sound and any remaining difference between the two
+image sets is the viewer, not the data.
+
+The reference grid is decimated to 0.60 Bohr — five times coarser than the
+delivered data — and is far too coarse for a V_S value you would quote. It
+answers "does the installation run and do the documented numbers come out", not
+"how big is the σ-hole".
+
+---
+
+## 2. Input files and formats
+
+Per molecule, in one folder:
+
+| File | Content | Units |
+|---|---|---|
+| `td.xyz` | Turbomole `pointval` **total density** grid | Bohr |
+| `tp.xyz` | Turbomole `pointval` **total potential** (ESP) grid | Bohr |
+| `*.mol` / `*.sdf` / `*.xyz` | molecular structure | Å (default) |
+
+**`td.xyz` and `tp.xyz` are not structure files** despite the extension. They are
+ASCII point clouds with one line per grid point, carrying the full coordinates
+plus the value:
+
+```
+#grid1  start  -15.000000  delta    0.120000  points    251
+#electrostatic potential
+# cartesian coordinates x,y,z and f(x,y,z)
+      -15.00000000   -15.00000000   -15.00000000   -0.00054019
+```
+
+At 251³ points that is about 1.25 GB per file. The same information as a `.cube`
+is roughly 200 MB, because the cube format stores the grid implicitly.
+
+### Accepted structure formats
+
+| Format | Notes |
+|---|---|
+| `.xyz` | `Symbol x y z`. With or without the leading atom-count and comment lines; a bare coordinate list is accepted. Default Å, changeable with `--struct-unit`. |
+| `.mol` | MDL molfile, V2000 and V3000. **Coordinates come *before* the element symbol**, the reverse of xyz. Always Å. |
+| `.sdf` | SD-file; only the first record (up to `$$$$`) is read. Always Å. |
+
+`--struct-unit` applies to `.xyz` only. Molfile coordinates are in Ångström by
+definition, so the option is ignored for them.
+
+**The structure file is needed once, for the conversion only.** Unlike the PyMOL
+pipeline, nothing downstream reads it again: `xyzToCubeToVMDVis.py` writes the
+atom positions into the cube header, and VMD then takes geometry *and* grid from
+that one file. There is no second source of coordinates that could disagree with
+the grid, so the classic "molecule floats next to its own surface" failure mode
+does not exist here.
+
+Do not try to open the Turbomole-derived `.xyz` files in VMD directly — they have
+no XYZ header, and VMD's reader aborts with "Unable to load molecule". Load the
+cube instead; it carries the atoms.
+
+---
+
+## 3. One molecule, step by step
+
+The three commands below are one molecule's full path from Turbomole output to
+finished images. For a whole folder of molecules, skip to §4.
+
+### 3.1 Convert the grids to cubes and create the VMD scene (`xyzToCubeToVMDVis.py`)
+
+```bash
+cd scripts
+python xyzToCubeToVMDVis.py --struct ../path/to/molecule.mol ../path/to/td.xyz ../path/to/tp.xyz
+```
+
+Writes `td.cube`, `tp.cube` and a ready-to-run `esp.tcl` next to the input files.
+Which grid is density and which is potential is detected from the file header,
+not from the file name. Expect a minute or two per grid.
+
+#### Positional argument
+
+| Argument | Meaning |
+|---|---|
+| `grids` | one or more Turbomole `pointval` files, e.g. `td.xyz tp.xyz`. Any number can be given; each produces one `.cube` next to it (or in `--outdir`). Existing `.cube` files are accepted here too, which is what `--tcl-only` uses. |
+
+#### Options that change the **cube files**
+
+| Option | Default | Effect |
+|---|---|---|
+| `--struct`, `-s` | *required* | structure file, `.xyz` / `.mol` / `.sdf`. Its atoms go into the cube header. Not needed with `--tcl-only`. |
+| `--struct-unit {angstrom,bohr}` | `angstrom` | unit of the structure file. `.xyz` only. |
+| `--outdir`, `-o` | next to the input | write the cube files and `esp.tcl` somewhere else. |
+| `--stride N` | `1` | keep every N-th grid point per axis. `2` → **8× smaller** files. |
+| `--quiet`, `-q` | off | suppress progress output. |
+
+#### Options that change only the generated `esp.tcl`
+
+| Option | Default | Effect |
+|---|---|---|
+| `--tcl-only` | off | rewrite `esp.tcl` from the existing cubes, touching no grid. Sub-second instead of minutes. |
+| `--no-vmd` | off | cubes only, no scene. |
+| `--esp-range` | `auto` | half-width of the colour scale in a.u., or `auto` — derived from V_S,min/V_S,max on the shell. |
+| `--iso` | `0.001` | isovalue of the density surface drawn in the scene. |
+| `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
+| `--scale` | `auto` | zoom, a number or `auto` — from the molecule's size and the window height. |
+| `--fill` | `0.85` | fraction of the image height the molecule fills at `--scale auto`. |
+| `--color-scale` | `RWB` | VMD colour scale. `RWB` is red-negative; `BWR` reverses it. |
+
+#### Examples
+
+```bash
+# standard: cubes + interactive scene
+python xyzToCubeToVMDVis.py --struct mol.mol td.xyz tp.xyz
+
+# fast pass: 8x smaller cubes, images look identical
+python xyzToCubeToVMDVis.py --struct mol.mol td.xyz tp.xyz --stride 2
+
+# structure file already in Bohr, cubes into a separate "out" folder
+python xyzToCubeToVMDVis.py --struct mol.xyz --struct-unit bohr --outdir ../out td.xyz tp.xyz
+
+# change the scene only, from cubes that already exist
+python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --esp-range 0.035 --opacity 1.0
+```
+
+**Never re-run the conversion just to change the scene.** Converting takes
+minutes; `--tcl-only` reads the two cube headers, works out which is which and
+rewrites the scene in well under a second. `--struct` is not needed then.
+
+**On `--stride`.** Use `--stride 2` while exploring and for images; use full
+resolution whenever a value goes into a table.
+
+What the converter takes care of, which is where hand-rolled conversions usually
+go wrong:
+
+* **Index order.** Turbomole varies *x* fastest, the cube format varies *z*
+  fastest. Without reordering you get a transposed, mirrored molecule.
+* **Units.** The grid is in Bohr, the structure file is normally in Å (factor
+  1.8897).
+* **Interrupted writes.** A cube is written as `<name>.cube.part` and renamed
+  only when complete, so a run stopped halfway cannot leave a half file with a
+  valid header behind.
+* **The view orientation.** The three standard views are computed from the
+  geometry — ring normal, C–halogen axis — and baked into `esp.tcl` as rotation
+  matrices. Same calculation as the PyMOL pipeline, so both image sets show the
+  same thing.
+
+---
+
+### 3.2 Look at it interactively (`esp.tcl`)
+
+Before rendering anything, check that the scene is what you expect:
+
+```bash
 vmd -e esp.tcl
 ```
 
-Concretely, from inside a molecule folder:
+or, inside a running VMD, in the Tk Console (`Extensions → Tk Console`):
 
-```bash
-python ../../scripts/xyzToCubeToVMDVis.py \
-    --struct brombenzol_aro_opti.mol td.xyz tp.xyz
+```tcl
+cd {C:/path/to/molecule}
+source esp.tcl
 ```
 
-This writes `td.cube`, `tp.cube` and `esp.tcl` next to the input grids. Expect a
-minute or two per grid — the pointval files are ~1.25 GB each and the cubes come
-out around 200 MB.
+Forward slashes and braces, not backslashes — Tcl reads `\` as an escape
+character.
 
-**Options that change the cube files**
+The script loads both cubes into one molecule ID, builds the ρ = 0.001
+isosurface from the density and colours it by the potential. The skeleton comes
+from the cube's own atom block, so it cannot be misaligned.
 
-| | |
+These commands are defined by the scene:
+
+| Command | Effect |
 |---|---|
-| `--struct`, `-s` | structure file for the cube's atom block: `.xyz`, `.mol`, `.sdf` (required unless `--tcl-only`) |
-| `--struct-unit` | `angstrom` (default) or `bohr`; ignored for `.mol`/`.sdf`, which are Å by definition |
-| `--stride N` | keep only every N-th grid point — `2` gives an 8× smaller file |
-| `--outdir`, `-o` | write elsewhere than next to the input |
+| `esp_view pi \| edge \| sigma` | the three standard views |
+| `esp_iso <value>` | change the isovalue live |
+| `esp_range <half-width>` | change the colour scale live |
+| `esp_opacity <0…1>` | change the surface opacity live |
+| `esp_snapshot <name>` | ray-traced image via Tachyon |
 
-**Options that change only `esp.tcl`**
+Tune with the live commands first, then bake the value you settled on into the
+file with `--tcl-only`, so the scene reproduces itself.
 
-| | |
-|---|---|
-| `--tcl-only` | rewrite `esp.tcl` from the existing cubes, touching no grid |
-| `--esp-range` | half-width of the colour scale in a.u., or `auto` (default): from V_S,min/V_S,max on the shell |
-| `--iso` | isovalue of the density surface (default 0.001) |
-| `--opacity` | surface opacity 0…1 (default 0.50 — see section 8 on how it relates to PyMOL's) |
-| `--scale` | zoom, a number or `auto` (default): from the molecule's size and the window height |
-| `--fill` | fraction of the image height the molecule fills at `--scale auto` (default 0.85) |
-| `--color-scale` | VMD colour scale, default `RWB`; `BWR` reverses it |
-| `--no-vmd` | cubes only, no scene |
+`esp.tcl` always carries the colour scale that was actually used for that
+molecule's images, plus the axis the σ view follows, so what you see
+interactively matches the figure set.
 
-**Never re-run the conversion just to change the scene.** Converting the grids
-takes minutes; `--tcl-only` reads the two cube headers, works out which is which
-and rewrites the scene in well under a second. `--struct` is not needed then:
+---
+
+### 3.3 Render the standard image set (`render_espVMD.py`)
+
+Run it from inside the molecule folder, where `esp.tcl` and the cubes are:
 
 ```bash
-python ../../scripts/xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --opacity 0.5
+cd ../sandbox/brombenzol
+python ../../scripts/render_espVMD.py
 ```
 
-### Everything in one go
+Output goes to `images/`. The script drives VMD for the three views, converts
+VMD's TGA output to PNG and draws the colour bar with matplotlib.
+
+Three views are produced, oriented **from the molecular geometry**:
+
+| File | View | Shows |
+|---|---|---|
+| `*_pi.png` | perpendicular to the molecular plane | π system, ring hydrogens |
+| `*_sigma.png` | along the C–halogen axis, from outside | **the σ-hole, head on** |
+| `*_edge.png` | in the molecular plane | overall profile |
+
+Every molecule therefore lands in the same orientation automatically — that is
+what makes an image set comparable, and it is why no manual rotation is needed or
+wanted. For molecules without a halogen, `*_sigma.png` looks down the longest
+principal axis instead; read the file name as "axial view" in that case.
+
+#### Options
+
+| Option | Default | Effect |
+|---|---|---|
+| `--outdir` | `images` | output folder |
+| `--scene` | `esp.tcl` | scene file to render; the smoke test uses `esp_check.tcl` |
+| `--res` | `1600x1280` | image size in px |
+| `--headless` | off | start VMD without a window (`-dispdev text`) — see below |
+| `--ao` | off | ambient occlusion: soft shadows in the recesses, slower |
+| `--shadows` | off | cast shadows. Off on purpose: they drop the sticks onto the isosurface as grey capsules that look like a data artefact. PyMOL renders without them too. |
+| `--keep-tga` | off | keep VMD's intermediate TGA files |
+| `--dpi` | `300` | resolution of the colour bar |
+| `--vmd` | autodetect | path to `vmd.exe` |
+| `--no-vmd` | off | do not call VMD; only convert existing TGA files and build the bar |
+
+#### Examples
 
 ```bash
-python scripts/run_allVMD.py --root sandbox
+# everything autodetected in the current molecule folder
+python ../../scripts/render_espVMD.py
+
+# no window, full resolution, deeper shading
+python ../../scripts/render_espVMD.py --headless --res 2400x1920 --ao
+
+# only rebuild the colour bar, do not touch VMD
+python ../../scripts/render_espVMD.py --no-vmd
+
+# VMD not on the PATH
+python ../../scripts/render_espVMD.py --vmd "C:\Program Files\VMD\vmd.exe"
 ```
 
-Walks the tree, and for every molecule folder converts the grids, writes
-`esp.tcl`, renders the three views, builds the colour bar and drops a
-`summary.csv` at the root.
+**`--headless` keeps the window shut.** VMD normally opens its OpenGL window for
+every pass, which over nine molecules is a dozen windows stealing focus.
+`--headless` starts it with `-dispdev text`: no window, no OpenGL. Tachyon still
+renders — it works from the scene graph, not from the framebuffer — and the image
+size then comes from `-size` on the command line rather than `display resize`, so
+it is no longer capped by your screen.
 
-Without `--root` it runs on `reference/` instead — that is the smoke test, see
-[section 5](#5-installation).
+**The renderer falls back, and the fallback is recorded.** Tachyon can abort on
+the axial view, where the line of sight crosses many transparent layers. The
+script then re-renders the missing views as an OpenGL window capture, which keeps
+the transparency, and only failing that as an opaque surface. Which pass produced
+which view is written into `*_settings.txt` and `summary.csv` — when a figure was
+made a different way, that must not disappear from the record. The window capture
+is the one pass that genuinely needs a window, so `--headless` defers rather than
+removes it: the window appears only when Tachyon has already failed.
+
+**The colour bar comes from matplotlib, not from VMD.** VMD has no legend object,
+and neither has PyMOL, so both pipelines draw it the same way, as a separate PNG.
+
+---
+
+## 4. Several molecules at once (`run_allVMD.py`)
+
+Put each molecule in its own folder under a common root — for your own data that
+is `sandbox/`, which git ignores:
+
+```
+sandbox/
+├── bromobenzene/   td.xyz  tp.xyz  bromobenzene.mol
+├── iodobenzene/    td.xyz  tp.xyz  iodobenzene.mol
+└── chlorobenzene/  td.xyz  tp.xyz  chlorobenzene.mol
+```
+
+Then:
+
+```bash
+cd scripts
+python run_allVMD.py --root ../sandbox --headless
+```
+
+This converts what needs converting, writes an `esp.tcl` next to each molecule's
+cube files, renders every molecule and collects `summary.csv` at the root. Called
+**without arguments** it runs on `reference/` instead — the smoke test from §1.3.
 
 **It analyses first and renders once.** V_S,min and V_S,max come out of the cube
-files, so no rendering is needed to find them: the script collects the values of
-all molecules first, then renders a single pass.
+files, so no rendering is needed to find them.
 
 **No second pass — a recommendation instead.** Images are only comparable on one
 shared scale, and the PyMOL pipeline renders twice to get there (`--two-pass`).
-In VMD an image costs a minute or two, so the first set would be waste. Every
-run therefore ends with the smallest scale that covers all molecules, and the
+In VMD an image costs a minute or two, so the first set would be waste. Every run
+therefore ends with the smallest scale that covers all molecules, and the
 ready-made command line to render with it:
 
 ```
@@ -201,165 +436,195 @@ Zum Rendern eines vergleichbaren Satzes:
 You read it, decide what the figure should show, and start the run that counts —
 the smallest scale that clips nothing is not always the most informative one. A
 single molecule with a very negative oxygen flattens the contrast of every other
-molecule in the set, and that is a judgement call, not something the script
-should make for you. Set a fixed value that is too small and the run says so:
-which molecules it clips, and what they would need.
+molecule in the set, and that is a judgement call. Set a fixed value that is too
+small and the run says so: which molecules it clips, and what they would need.
 
-| | |
-|---|---|
-| `--esp-range auto` | each molecule on its own scale (default) |
-| `--esp-range 0.035` | fixed value — this is what you pass on the second run, and what the PyMOL `summary.csv` value goes into for a direct comparison |
-| `--esp-range common` | one scale for all, taken straight from this run — the recommendation applied without asking |
-| `--only NAME…` | restrict to these folders, wildcards allowed |
-| `--stride`, `--struct-unit`, `--force-convert` | conversion, as in the single-molecule script |
-| `--iso`, `--opacity`, `--scale`, `--fill`, `--color-scale` | scene |
-| `--headless` | no VMD window (see below) |
-| `--res`, `--ao`, `--shadows`, `--keep-tga`, `--dpi`, `--vmd` | rendering |
-| `--no-render` | convert and write `esp.tcl` only |
-| `--images-dir`, `--summary` | output locations |
+### Options
 
-`summary.csv` carries the numbers *and* what each image was rendered with —
-resolution, renderer, ambient occlusion, shadows, and per view which pass
-produced it. When Tachyon falls back, that must not disappear from the record.
+| Option | Default | Effect |
+|---|---|---|
+| `--root` | `reference/` | directory tree to search for molecule folders |
+| `--only NAME …` | all | restrict the run to these folders; simple wildcards allowed, e.g. `--only Pyridine '*-Pyr'` |
+| `--stride N` | `1` | grid decimation **during conversion**. Ignored when the cube files already exist — use `--force-convert` to rebuild them. |
+| `--struct-unit {angstrom,bohr}` | `angstrom` | as in the converter; `.xyz` only |
+| `--force-convert` | off | rewrite cube files even if they already exist |
+| `--esp-range` | `auto` | `auto` (each molecule on its own scale), a fixed value in a.u., or `common` (one scale for all, straight from this run) |
+| `--iso` | `0.001` | density isovalue, passed through |
+| `--opacity` | `0.50` | passed through |
+| `--scale`, `--fill` | `auto`, `0.85` | zoom, passed through |
+| `--color-scale` | `RWB` | passed through |
+| `--no-render` | off | convert and write the scene only |
+| `--headless` | off | start VMD without a window |
+| `--res` | `1600x1280` | passed through |
+| `--ao`, `--shadows`, `--keep-tga`, `--dpi`, `--vmd` | | passed through |
+| `--images-dir` | `images` (`images_check` for the built-in reference run) | output folder inside each molecule folder |
+| `--summary` | `<root>/summary.csv` | path of the CSV summary |
 
-### The image set
-
-From a molecule folder, after `esp.tcl` exists:
-
-```bash
-python ../../scripts/render_espVMD.py
-```
-
-Renders the three views with Tachyon (ambient occlusion and shadows on),
-converts VMD's TGA output to PNG, and writes the colour bar — into `images/`:
-
-```
-images/<molecule>_pi.png  _edge.png  _sigma.png  _colorbar.png  _settings.txt
-```
-
-The same five files the PyMOL pipeline produces, deliberately: only then can the
-two sets be laid side by side. Options: `--res 2400x1920`, `--ao` (slower,
-deeper), `--no-vmd` (only convert and build the bar), `--vmd <path>` if VMD is
-not on the `PATH`.
-
-**`--headless` keeps the window shut.** VMD normally opens its OpenGL window for
-every pass, which over nine molecules is a dozen windows stealing focus.
-`--headless` starts it with `-dispdev text`: no window, no OpenGL. Tachyon still
-renders — it works from the scene graph, not from the framebuffer — and the
-image size then comes from `-size` on the command line rather than
-`display resize`, so it is no longer capped by your screen. On a 1061-pixel-tall
-screen, `--res 1600x1280` finally gives 1280.
-
-The one thing that genuinely needs the window is the snapshot fallback, which
-copies the OpenGL buffer. So `--headless` does not remove it, it only defers it:
-the window appears solely when Tachyon has failed on a view and the alternative
-would be losing that image. On the current data that happens for roughly a third
-of the views.
-
-**The colour bar comes from matplotlib, not from VMD** — and not from PyMOL
-either. Neither program has a legend object, so both pipelines draw it the same
-way, as a separate PNG. The scene itself deliberately draws none: doing it in VMD
-means putting graphics primitives into a dummy molecule and detaching it from the
-mouse, which is fiddly and never looks quite right.
-
-**Ambient occlusion is the single biggest step** from preview to publication
-image. It barely shows in the OpenGL window and strongly in the ray-traced
-render, laying soft shadows into the recesses between the CH bulges. Compare a
-VMD OpenGL screenshot against a PyMOL `ray` image and you are comparing a
-preview against a render — not the two programs.
-
-**Inside VMD**, `esp.tcl` defines these commands:
-
-| | |
-|---|---|
-| `esp_view pi \| edge \| sigma` | the three standard views |
-| `esp_iso <value>` | change the isovalue live |
-| `esp_range <half-width>` | change the colour scale live |
-| `esp_opacity <0…1>` | change the surface opacity live |
-| `esp_snapshot <name>` | ray-traced image via Tachyon |
-
-Tune with the live commands first, then bake the value you settled on into the
-file with `--tcl-only` so the scene reproduces itself.
-
----
-
-## 5. Installation
-
-### VMD
-
-Download from the [TCBG test release page](https://www.ks.uiuc.edu/Research/vmd/alpha/)
-(free registration) and take **Version 1.9.4, "Windows 64-bit, CUDA, OptiX,
-OSPray"**.
-
-Two notes on that choice:
-
-* The page labels the Windows build "Windows 10". That is the tested minimum, not
-  an upper limit — it installs and runs on Windows 11 natively.
-* Version 2.0.0 exists as a monthly-updated alpha with a *"fully overhauled plugin
-  system"* still to come. Its new features do not touch what this pipeline needs,
-  and a viewer rebuilt every month is a poor foundation for a workflow that has
-  to be reproducible. 1.9.x is what the published literature used. To try 2.0,
-  install it alongside — the two do not conflict.
-
-The Windows installer does **not** put VMD on the `PATH`, so `vmd -e esp.tcl`
-will not work in a fresh shell until you add it — see section 8.
-
-### Python
-
-NumPy for the conversion; matplotlib and Pillow for the image set.
+### Examples
 
 ```bash
-conda env create -f environment.yml
-conda activate esp-vmd
-```
+# the normal run
+python run_allVMD.py --root ../sandbox --headless
 
-The `esp` environment from the PyMOL project works just as well — it already has
-NumPy, and VMD is not a conda package either way.
+# the second run, with the scale the first one recommended
+python run_allVMD.py --root ../sandbox --headless --esp-range 0.0700
 
-### Verify & smoke test
+# pick individual molecules out of a larger root
+python run_allVMD.py --root ../sandbox --only Pyridine Me-Pyr
+python run_allVMD.py --root ../sandbox --only "*benzol"
 
-Check the Python side first:
+# match the PyMOL figures exactly: take the value from their summary.csv
+python run_allVMD.py --root ../sandbox --esp-range 0.035
 
-```bash
-python -c "import numpy, matplotlib, PIL; print('ok')"
-```
+# convert and write the scenes, render later
+python run_allVMD.py --root ../sandbox --no-render
 
-Then run the whole chain on the bundled reference molecule — `run_allVMD.py`
-with no arguments does exactly that:
-
-```bash
-cd scripts
+# installation check on the reference data
 python run_allVMD.py
 ```
 
-It converts `reference/brombenzol/td.xyz` and `tp.xyz` to cubes, writes
-`esp_check.tcl`, renders the three views into `images_check/` and leaves a
-`reference/summary_check.csv`. The `_check` names are deliberate: the smoke test
-must never overwrite the committed reference files, otherwise you can no longer
-tell whether the reference is still the reference.
+> **Do not put a common colour scale across data of different provenance.** One
+> scale for the whole run is only meaningful if the molecules were computed the
+> same way — same geometry optimisation, same method, same basis set. Use
+> `--only` or separate root folders to keep groups apart.
 
-Compare your `images_check/` with the committed `images/`, and your numbers with
-`reference/summary.csv`. On the decimated reference grid expect
+---
 
-| | |
+## 5. What the workflow writes
+
+Per molecule folder:
+
+| File | Written by | Content |
+|---|---|---|
+| `td.cube`, `tp.cube` | `xyzToCubeToVMDVis.py` | density and ESP grids in Gaussian cube format. The first line of `tp.cube` carries V_S,min, V_S,max and the range, so `--tcl-only` recovers them without re-reading 200 MB. |
+| `esp.tcl` | `xyzToCubeToVMDVis.py`, `run_allVMD.py` | interactive VMD scene with the scale actually used and the three view matrices |
+| `images/<prefix>_pi.png` | `render_espVMD.py` | π face |
+| `images/<prefix>_sigma.png` | `render_espVMD.py` | along the C–X axis |
+| `images/<prefix>_edge.png` | `render_espVMD.py` | in-plane profile |
+| `images/<prefix>_colorbar.png` | `render_espVMD.py` | the colour scale as a separate figure |
+| `images/<prefix>_settings.txt` | `render_espVMD.py` | **every parameter used**, plus the measured surface ESP values and which pass produced each view. Keep it next to the figures — it is the record of how they were made. |
+| `images/_vmd.log` | `render_espVMD.py` | VMD's full console output, appended per pass. The place to look when a view is missing: a VMD crash leaves no error text, only an absent file. |
+
+The smoke test writes the same files under `_check` names (`esp_check.tcl`,
+`images_check/`, `summary_check.csv`) so it can never overwrite the committed
+reference.
+
+Per run, `run_allVMD.py` writes `summary.csv`:
+
+| Column | Content |
 |---|---|
-| V_S,min | −0.01863 a.u. |
-| V_S,max | +0.03070 a.u. |
-| colour scale | ±0.0350 a.u. |
-| shell points | 313 |
+| `molecule` | folder name |
+| `structure` | structure file used for the cube's atom block |
+| `grid` | cube dimensions |
+| `iso_au` | density isovalue used |
+| `shell_points` | number of grid points near the ρ = iso shell |
+| `VS_min_au`, `VS_max_au` | surface ESP extrema in a.u. |
+| `VS_min_kJ`, `VS_max_kJ` | the same in kJ/(mol·e) |
+| `esp_range_used_au`, `esp_range_mode` | colour range and how it was chosen |
+| `color_scale`, `opacity` | scene settings |
+| `resolution_px`, `renderer` | image size and the renderer of the first pass |
+| `ambient_occlusion`, `shadows` | render settings |
+| `views` | per view, which pass produced it, e.g. `pi:Transparenz;edge:Transparenz, Fensterbild` |
 
-**These are the same numbers the PyMOL pipeline reports**, because both
-reference sets are built from the same bromobenzene data with the same
-parameters (`--stride 5`, `--margin 2.5`) and both derive V_S from grid points
-near the ρ = 0.001 shell. That is the point: it is a cross-check of the two
-pipelines, not just of this one. If your numbers match, the installation is
-sound and any remaining difference between the two image sets is the viewer,
-not the data.
+Whatever colour range you choose, **state it in the figure caption** and ship
+`*_colorbar.png` with the figures. An ESP figure without its scale is
+uninterpretable.
 
-The reference grid is decimated to 0.60 Bohr — five times coarser than the
-delivered data — and is far too coarse for a V_S value you would quote. It
-answers "does the installation run and do the documented numbers come out", not
-"how big is the σ-hole". Rebuild it, or make one for another molecule, with:
+---
+
+## 6. Console output
+
+`run_allVMD.py` prints the measured values per molecule, then the render passes
+as they happen, and closes with the summary table and the colour-scale
+recommendation:
+
+```
+[brombenzol]
+    V_S,min = -0.01882   V_S,max = +0.03154 a.u.  (38008 Punkte)  -> +/- 0.0350
+...
+[1] VMD: C:\Program Files\VMD\vmd.EXE
+    Renderer: TachyonInternal
+    Ziel: images
+    == pi: beginne ==
+    -> images/brombenzol_pi.tga
+    == edge: beginne ==
+    Zweiter Anlauf fuer edge, sigma: Transparenz, Fensterbild
+```
+
+Lines to read carefully:
+
+* `Zweiter Anlauf fuer …` — Tachyon failed on those views and the fallback took
+  over. The images exist, but they were made differently; `*_settings.txt` says
+  how.
+* `! nicht gerendert: …` — every pass failed for those views. `images/_vmd.log`
+  has VMD's own output.
+* `! … schneidet ab` — the fixed `--esp-range` is smaller than a molecule needs,
+  so values beyond it saturate and become indistinguishable in the picture.
+
+The scripts here print in plain text; unlike the PyMOL pipeline there is no ANSI
+colouring and no `--no-color`, because a VMD batch run is dominated by VMD's own
+output anyway.
+
+---
+
+## 7. Create Tp.xyz, Td.xyz and a structure file from a SMILES notation
+
+There is no test-data generator in this repository. The sister project ships a
+minimal one that produces very rough `td.xyz` / `tp.xyz` grids and a structure
+file from a SMILES string:
+
+```
+Pymol_esp_visualization/tools/CreateTpTdFromSmiles.py
+```
+
+Its output is good enough to exercise the pipeline end to end and nothing more —
+do not read numbers off it. Running it needs a separate environment; see
+`tools/environment-testdata.yml` and `tools/README.txt` in that repository.
+
+---
+
+## 8. Repository layout
+
+```
+VMD_esp_visualization/
+├── README.md                     this document (the user guide)
+├── environment.yml               conda environment (Python side only)
+├── .gitignore
+├── scripts/
+│   ├── xyzToCubeToVMDVis.py      Turbomole pointval -> cube -> esp.tcl
+│   ├── esp_template.tcl          the VMD scene, with @@placeholders@@
+│   ├── render_espVMD.py          standard image set -> images/  (drives VMD)
+│   ├── render_esp.tcl            the VMD half: 3 views via Tachyon
+│   ├── run_allVMD.py             batch driver + summary.csv
+│   └── constants.py              unit conversions, shared by all scripts
+├── reference/                    known-good example — output, not input
+│   ├── summary.csv
+│   └── brombenzol/
+│       ├── brombenzol_aro_opti.mol
+│       ├── td.xyz                raw pointval grids, decimated to 0.60 Bohr
+│       ├── tp.xyz                (32×37×24, 1.7 MB each)
+│       └── images/               reference images
+├── tools/
+│   └── make_reference.py         decimated reference set from a full folder
+├── docs/
+│   └── Details.docx              background: why VMD, viewer mechanics,
+│                                 version choice, renderer quirks
+└── sandbox/                      your own data and experiments, not tracked
+```
+
+**Large files are deliberately not tracked.** `.gitignore` excludes `*.cube`,
+`*.dx` and the raw `td.xyz`/`tp.xyz` grids — a full-resolution cube is ~200 MB
+and GitHub rejects anything above 100 MB. Regenerate them with
+`xyzToCubeToVMDVis.py`. `esp.tcl` is generated too and is ignored inside molecule
+folders; only the scripts under `scripts/` are tracked.
+
+**`reference/` and `sandbox/` do different jobs.** `reference/` holds a
+known-good example and is committed; `sandbox/` is where your own molecules and
+the large raw data live, and git ignores it entirely. If a run goes wrong,
+`reference/` tells you whether the problem is your installation or your data. Its
+decimated grids are the one exception to the rule above and are tracked on
+purpose — that is what makes a fresh clone self-testing. Rebuild them, or make a
+set for another molecule, with:
 
 ```bash
 python tools/make_reference.py sandbox/brombenzol --name brombenzol
@@ -371,69 +636,9 @@ It ships as raw `pointval` files rather than cubes on purpose: unit conversion
 and index reordering are the steps most likely to break, and ready-made cubes
 would skip exactly those.
 
----
-
-## 6. Roadmap
-
-- [x] Install VMD 1.9.4, confirm `Extensions → Tk Console` opens
-- [x] Load a cube pair by hand, get one ESP-coloured isosurface on screen
-- [x] Confirm `mol addfile` + colour-by-`Volume` is the right mechanic
-- [x] `xyzToCubeToVMDVis.py` — pointval → cube → `esp.tcl`
-- [x] Colour scale from V_S,min / V_S,max, cross-checked against the PyMOL reference
-- [ ] Convert the halobenzene set and check all three views
-- [x] `render_esp.py` / `render_esp.tcl` — the standard image set into `images/`
-- [x] `run_allVMD.py` — batch driver, analyse-then-render
-- [ ] Fill `reference/` with a known-good example rendered in VMD
-- [ ] **Cross-check PyMOL vs. VMD** on identical cubes at an identical colour scale
-
----
-
-## 7. Repository layout
-
-```
-VMD_esp_visualization/
-├── README.md                     this document
-├── environment.yml               conda environment (Python side only)
-├── .gitignore
-├── scripts/
-│   ├── xyzToCubeToVMDVis.py      pointval -> cube -> esp.tcl   (535 lines)
-│   ├── esp_template.tcl          the VMD scene, with @@placeholders@@
-│   ├── render_espVMD.py          image set -> images/  (drives VMD)
-│   ├── render_esp.tcl            the VMD half: 3 views via Tachyon
-│   ├── run_allVMD.py             batch: convert + scene + images + summary.csv
-│   └── constants.py              unit conversions
-├── reference/                    known-good example — output, not input
-│   ├── summary.csv
-│   └── brombenzol/
-│       ├── brombenzol_aro_opti.mol
-│       ├── td.xyz                raw pointval grids, decimated to 0.60 Bohr
-│       ├── tp.xyz                (32×37×24, 1.7 MB each)
-│       └── images/               reference images
-├── results/                      the delivered image sets
-├── tools/
-│   └── make_reference.py         decimated reference set from a full folder
-├── docs/                         background and the PyMOL/VMD comparison
-└── sandbox/                      your own data and experiments, not tracked
-```
-
 **The scene lives in its own file.** `esp_template.tcl` is real Tcl with
-`@@placeholder@@` markers that the Python script fills in. Keeping 240 lines of
-Tcl inside a Python string cost syntax highlighting, made the converter twice as
-long as the job warrants, and hid mistakes in the escaping.
-
-**Large files are deliberately not tracked.** `.gitignore` excludes `*.cube`,
-`*.dx` and the raw `td.xyz`/`tp.xyz` grids — a full-resolution cube is ~200 MB
-and GitHub rejects anything above 100 MB. Regenerate them with
-`xyzToCubeToVMDVis.py`. `esp.tcl` is generated too and is ignored inside molecule
-folders; only the scripts under `scripts/` are tracked.
-
-**`reference/` and `sandbox/` do different jobs.** `reference/` holds a
-known-good example and is committed; `sandbox/` is where your own molecules and
-the large raw data live, and git ignores it entirely. If a run goes wrong,
-`reference/` tells you whether the problem is your installation or your data.
-Its decimated grids are the one exception to the rule above and are tracked on
-purpose — that is what makes a fresh clone self-testing. The smoke test's own
-output (`images_check/`, `esp_check.tcl`, `summary_check.csv`) is ignored again.
+`@@placeholder@@` markers that the Python script fills in, not a Python string —
+that keeps syntax highlighting and makes escaping mistakes visible.
 
 The name `xyzToCubeToVMDVis.py` is deliberately not `xyzToCube.py`: the PyMOL
 project has a script by that name with a different feature set, and two files
@@ -441,107 +646,46 @@ with one name in two repositories is how the wrong one gets edited.
 
 ---
 
-## 8. Notes and troubleshooting
+## 9. What the PyMOL pipeline does and this one does not
 
-**`vmd` is not recognised as a command (Windows).**
-The installer registers a Start Menu entry but does not extend the `PATH`. Find
-the executable and add its folder once, in PowerShell:
+This repository draws pictures. The sister project draws pictures *and* measures
+the surface. The gap is deliberate — a second implementation of the measurement
+would be a duplicate nobody notices drifting until two chapters of the same
+thesis quote different numbers for the same molecule — but you should know where
+it runs.
 
-```powershell
-$sh = New-Object -ComObject WScript.Shell     # ask the Start Menu shortcut
-Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse `
-  -Filter "*VMD*.lnk" -ErrorAction SilentlyContinue |
-  ForEach-Object { $sh.CreateShortcut($_.FullName).TargetPath }
+**Quantities.** Only the PyMOL pipeline locates and reports the σ-hole.
 
-$vmd = "C:\Program Files\VMD"               # the folder the line above reported
-$old = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($old -notlike "*$vmd*") {
-    [Environment]::SetEnvironmentVariable("Path", "$old;$vmd", "User")
-}
-```
+| | PyMOL | VMD (here) |
+|---|---|---|
+| V_S,min / V_S,max | interpolated onto the ρ = 0.001 isosurface | from grid points *near* the shell |
+| Which atom carries the extremum | reported (`VS_max_on`, `VS_min_on`) | not determined |
+| σ-hole potential | located per halogen, ray-based or point-based | **not computed** |
+| Halogen belt minimum | reported | not computed |
+| Several halogens | all evaluated, ranked, the strongest drives the σ view | first halogen drives the σ view |
+| Units in the summary | a.u., kcal/(mol·e), kJ/(mol·e) | a.u., kJ/(mol·e) |
 
-Take `$old` rather than appending to `$env:Path`, which would copy every system
-entry into your user PATH as well. `render_esp.py` also looks at `VMDDIR`, which
-the installer does set, so it usually finds VMD even without this.
+The values that both do report agree to every digit on the shared reference
+dataset, which is what §1.3 checks.
 
-Open a new shell afterwards. Until then, start VMD from the Start Menu and load
-the scene from the Tk Console instead:
+**Figure options.** PyMOL offers a rainbow ramp as an alternative colour map
+(`--rainbow`, written as a separate image set so the standard one survives),
+several background colours in one run (`--backgrounds white black`), rendering a
+subset of the views (`--views pi sigma`), and an explicit margin around the
+molecule (`--buffer`). None of those exist here.
 
-```tcl
-cd {C:/Users/felix/.../sandbox/brombenzol}
-source esp.tcl
-```
+**Workflow.** PyMOL has `--two-pass`, which renders once to find the common
+colour scale and again to use it. Here that is a printed recommendation and a
+second command you start yourself, because a VMD image costs a minute or two and
+the first set would be thrown away.
 
-Forward slashes and braces, not backslashes — Tcl reads `\` as an escape
-character.
+**Reliability.** PyMOL's ray tracer renders every view of every molecule in this
+set without complaint. VMD's Tachyon aborts on roughly a third of the views —
+stacked transparent layers, heap corruption, no error message — and the images
+survive only because of the fallback chain in §3.3. That difference is itself a
+result and is documented in `docs/Details.docx`.
 
-**"Unable to load molecule" when opening an `.xyz` in VMD.**
-The Turbomole-derived structure files here have no XYZ header — no atom count,
-no comment line, just coordinates. PyMOL guesses; VMD's reader does not and
-aborts. You do not need to fix the file: load the **cube** instead. It carries
-the atom block, so `mol new td.cube type cube` gives you geometry and grid at
-once.
-
-**The molecule sits small and off-centre in the window.**
-`display resetview` fits the view to everything drawn, and the isosurface carries
-the extent of the whole grid box (30 × 30 × 30 Bohr), inside which the molecule
-is rarely centred. `esp.tcl` handles this in `esp_center`, which centres on the
-atoms instead. If you lose the view, call `esp_view pi`.
-
-**The skeleton does not show through at all, at any opacity.**
-This one is not about opacity. **VMD draws representations in index order and
-writes depth for transparent surfaces too.** With the isosurface on rep 0 it is
-drawn first, and the skeleton drawn afterwards fails the depth test everywhere
-the surface lies in front of it — which is everywhere. You get a visibly
-translucent surface with nothing behind it, and lowering the opacity does not
-help, because the geometry was discarded before blending. The tell-tale symptom:
-the skeleton appears only where the near clipping plane cuts the surface open
-when you zoom in.
-
-The fix is the order. `esp.tcl` adds the opaque Licorice rep **first** (rep 0)
-and the transparent isosurface **second** (rep 1), which is why the procs address
-the surface as `$REP_SURF`. If you build a scene by hand in the GUI, the same
-rule applies: transparent reps last.
-
-**The skeleton shows through but is too faint.**
-Two effects stack here, and both are worth knowing when comparing to PyMOL.
-
-*You look through two layers.* The isosurface is closed: the line of sight
-enters at the front and leaves at the back. At opacity *a* only (1−*a*)² of what
-lies behind survives — at *a* = 0.6 that is 16 %, and the skeleton disappears
-although the number sounds like "half transparent". PyMOL's `transparency 0.15`
-is nominally *a* = 0.85, yet its images show the sticks; the two programs weight
-transparency differently. **Identical parameters do not give identical images**,
-which is exactly the kind of renderer detail this project exists to document.
-Around 0.3 in VMD gives the impression PyMOL gives at 0.15.
-
-*A strong specular highlight fills the gap back in.* A milky sheen sits on top of
-whatever the opacity lets through, so `esp.tcl` keeps specular low (0.10).
-
-**Zooming in cuts a hole in the surface.**
-That is the near clipping plane, not transparency — VMD's default (0.5) slices a
-disc out of the surface as you approach, and you find yourself looking into a
-cross-section. `esp.tcl` sets `display nearclip set 0.01`. If you have an old
-scene open, run that line in the Tk Console.
-
-**The surface looks grainy, like a bad print.**
-VMD's default render mode fakes transparency by dropping pixels ("screen door").
-`esp.tcl` requests `display rendermode GLSL`, which does real alpha blending; if
-your driver cannot, the request fails silently and you keep the dotted look on
-screen. The rendered images are unaffected — Tachyon does proper transparency
-regardless.
-
-**VMD shows two frames after loading.**
-The second cube brings its own copy of the coordinates, which VMD appends as an
-extra frame. `esp.tcl` deletes it.
-
-**The blue σ-hole looks pale.**
-It should. On a ±0.035 a.u. scale a σ-hole of +0.016 a.u. reaches under half
-saturation. Rescaling to make it vivid would break comparability with the PyMOL
-images — that is what `esp_range` is for when you want to look, and why the
-delivered images keep the fixed scale.
-
-**The three standard views are rotated wrong.**
-`esp_view` assumes a planar molecule in the xy-plane with the C–X axis along y,
-which is how the Turbomole optimisation leaves the halobenzenes here. For other
-geometries, rotate by hand and use `esp_snapshot`.
+**Supporting material.** The sister project also carries the parameter studies
+(`tools/iso_sweep.py`, `tools/stride_sweep.py`), the test-data generator from
+§7, the delivered image sets for all nine molecules under `results/`, and the
+background document with method, results and references.
