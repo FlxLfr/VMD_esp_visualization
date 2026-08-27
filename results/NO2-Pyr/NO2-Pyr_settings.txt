@@ -1,22 +1,24 @@
-Renderparameter (erzeugt von render_espVMD.py)
+Render parameters (written by render_espVMD.py)
 =======================================================
-Molekuel          : NO2-Pyr
-Dichte-Cube       : td.cube
-ESP-Cube          : tp.cube
-Isowert rho       : 0.001 a.u.
+Molecule          : NO2-Pyr
+Density cube      : td.cube
+ESP cube          : tp.cube
+Isovalue rho      : 0.001 a.u.
 V_S,min           : -0.04712 a.u. (-123.7 kJ/(mol*e))
 V_S,max           : +0.04487 a.u. (+117.8 kJ/(mol*e))
-Schalenpunkte     : 14452
-                    (Gitterpunkte auf der Schale, nicht interpoliert -
-                     zum Zitieren die Werte der PyMOL-Pipeline nehmen)
-Farbskala         : -0.0500 .. +0.0500 a.u.
-Farbrampe         : RWB (rot negativ, blau positiv)
-Schlagschatten    : aus
-Umgebungsverdeck. : aus
-Bildgroesse       : 1600 x 1061 px
+Shell points      : 14452
+                    (grid points in the band rho = iso +/- 12 %,
+                     the same calculation as in the PyMOL
+                     pipeline and the same numbers. The sigma
+                     hole is determined only there, not here.)
+Colour scale      : -0.0500 .. +0.0500 a.u.
+Colour ramp       : RWB (red negative, white zero, blue positive)
+Background        : white
+Ambient occl.     : off
+Image size        : 1600 x 1061 px
 Renderer          : TachyonInternal
-Projektion        : orthoskopisch
-Ansicht pi        : Transparenz
-Ansicht edge      : Transparenz
-Ansicht sigma     : Transparenz
-Erzeugt           : 2026-08-26 16:12
+Projection        : orthoscopic
+View pi           : transparency
+View edge         : transparency, window capture
+View sigma        : transparency, window capture
+Written           : 2026-08-27 14:58

@@ -1,22 +1,24 @@
-Renderparameter (erzeugt von render_espVMD.py)
+Render parameters (written by render_espVMD.py)
 =======================================================
-Molekuel          : brombenzol
-Dichte-Cube       : td.cube
-ESP-Cube          : tp.cube
-Isowert rho       : 0.001 a.u.
+Molecule          : brombenzol
+Density cube      : td.cube
+ESP cube          : tp.cube
+Isovalue rho      : 0.001 a.u.
 V_S,min           : -0.01883 a.u. (-49.4 kJ/(mol*e))
 V_S,max           : +0.03154 a.u. (+82.8 kJ/(mol*e))
-Schalenpunkte     : 38008
-                    (Gitterpunkte auf der Schale, nicht interpoliert -
-                     zum Zitieren die Werte der PyMOL-Pipeline nehmen)
-Farbskala         : -0.0350 .. +0.0350 a.u.
-Farbrampe         : RGB (Regenbogen: rot negativ, gruen null, blau positiv)
-Hintergrund       : white
-Umgebungsverdeck. : aus
-Bildgroesse       : 1600 x 1061 px
+Shell points      : 38008
+                    (grid points in the band rho = iso +/- 12 %,
+                     the same calculation as in the PyMOL
+                     pipeline and the same numbers. The sigma
+                     hole is determined only there, not here.)
+Colour scale      : -0.0350 .. +0.0350 a.u.
+Colour ramp       : RGB (rainbow: red negative, green zero, blue positive)
+Background        : white
+Ambient occl.     : off
+Image size        : 1600 x 1061 px
 Renderer          : TachyonInternal
-Projektion        : orthoskopisch
-Ansicht pi        : Transparenz
-Ansicht edge      : Transparenz
-Ansicht sigma     : Transparenz, Fensterbild
-Erzeugt           : 2026-08-26 23:22
+Projection        : orthoscopic
+View pi           : transparency
+View edge         : transparency
+View sigma        : transparency, window capture
+Written           : 2026-08-27 15:06
