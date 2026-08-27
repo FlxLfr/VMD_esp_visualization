@@ -561,6 +561,18 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
 # gerenderten Standardsatz minimal veraendern.
 # ----------------------------------------------------------------------------
 
+# VMD-Skala als Untergrund der Rampe. Fest verdrahtet, nicht waehlbar: ROT ist
+# negativ, BLAU positiv - die Konvention von Politzer/Murray, der Literatur und
+# der PyMOL-Pipeline. Frueher gab es dafuer --color-scale. Herausgenommen, weil
+# eine umgedrehte Rampe kein anders AUSSEHENDES Bild ergibt, sondern eines, das
+# die gegenteilige Aussage zu zeigen scheint - und weil der Farbbalken aus
+# matplotlib kommt und die Umkehrung nicht mitgemacht haette: die Bilder waeren
+# gespiegelt gewesen, die Legende daneben nicht.
+#
+# Bei --rainbow ist RGB nur der Untergrund; esp_ramp ueberschreibt die
+# Farbtabelle danach mit den fuenf Stuetzfarben aus RAMP_HEX.
+COLOR_SCALE = {"redblue": "RWB", "rainbow": "RGB"}
+
 RAMP_HEX = {
     "rainbow": ["#d40000", "#f0e000", "#00a000", "#00c8d4", "#0030d4"],
     "redblue": ["#d40000", "#ffffff", "#0030d4"],
@@ -581,7 +593,7 @@ def ramp_stops(name):
 
 
 def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
-                     opacity=0.50, scale="auto", fill=0.85, colorscale="RWB",
+                     opacity=0.50, scale="auto", fill=0.85,
                      sources="", atoms=None, rainbow=False):
     """Fuellt esp_template.tcl.
 
@@ -633,7 +645,7 @@ def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
         "@@OPACITY@@": f"{opacity:.6f}",
         "@@SCALE@@": scale if scale == "auto" else f"{scale:g}",
         "@@FILL@@": f"{fill:g}",
-        "@@COLORSCALE@@": colorscale,
+        "@@COLORSCALE@@": COLOR_SCALE["rainbow" if rainbow else "redblue"],
         "@@RAMP_STOPS@@": ramp_stops("rainbow" if rainbow else None),
         "@@STATS@@": note + axis_note,
         "@@ROT_PI@@": rot["pi"],
@@ -690,20 +702,11 @@ def main(argv=None):
     g.add_argument("--fill", type=float, default=0.85,
                    help="Anteil der Fensterhoehe fuer das Molekuel bei "
                         "--scale auto (Standard 0.85)")
-    g.add_argument("--color-scale", default=None,
-                   help="VMD-Farbskala, Standard RWB (rot negativ); "
-                        "mit --rainbow RGB")
     g.add_argument("--rainbow", action="store_true",
                    help="Regenbogenrampe statt rot-weiss-blau. Schreibt "
                         "esp_rainbow.tcl, damit die Standardszene erhalten "
                         "bleibt.")
     args = p.parse_args(argv)
-
-    # RGB ist VMDs Regenbogen: kleinster Wert rot, Mitte gruen, groesster blau -
-    # dieselbe Richtung wie die Rampe der PyMOL-Pipeline. Ein ausdrueckliches
-    # --color-scale gewinnt, sonst waere die Option neben --rainbow wirkungslos.
-    if args.color_scale is None:
-        args.color_scale = "RGB" if args.rainbow else "RWB"
 
     verbose = not args.quiet
     if args.tcl_only and args.no_vmd:
@@ -809,7 +812,7 @@ def main(argv=None):
                      scale=(args.scale if str(args.scale) == "auto"
                             else float(args.scale)),
                      fill=args.fill,
-                     colorscale=args.color_scale, rainbow=args.rainbow,
+                     rainbow=args.rainbow,
                      sources=", ".join(os.path.basename(g) for g in args.grids))
     if verbose:
         print(f"[4] VMD-Szene: {tcl}   (Farbskala +/- {rng:.4f} a.u.)")

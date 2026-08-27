@@ -68,7 +68,7 @@ VMD is not a conda package and the Windows installer does **not** put it on the
 `PATH`. The scripts find it anyway: they check the `PATH`, then the `VMDDIR`
 environment variable that the installer does set, then the usual install
 folders. Only if all three fail the path needs to be set manually:`--vmd "C:\Program Files\VMD\vmd.exe"`
-how to set the path permanently is described in the "Getting VMD onto the PATH (Windows) section in the /docs/details.docx
+how to set the path permanently is described in the "Getting VMD onto the PATH (Windows)" section in the /docs/details.docx
 
 ### 1.2 Create the environment
 

@@ -339,9 +339,6 @@ def main(argv=None):
     g.add_argument("--scale", default="auto", help="Zoom, Zahl oder 'auto'")
     g.add_argument("--fill", type=float, default=0.85,
                    help="Anteil der Bildhoehe fuer das Molekuel bei --scale auto")
-    g.add_argument("--color-scale", default=None,
-                   help="VMD-Farbskala, Standard RWB (rot negativ); "
-                        "mit --rainbow RGB")
     g.add_argument("--rainbow", action="store_true",
                    help="Regenbogenrampe statt rot-weiss-blau. Schreibt "
                         "esp_rainbow.tcl und einen eigenen Bildersatz "
@@ -385,10 +382,9 @@ def main(argv=None):
         + ("_rainbow" if args.rainbow else "") + ".tcl"
     if args.images_dir is None:
         args.images_dir = "images_check" if is_reference else "images"
-    # RGB ist VMDs Regenbogen: rot - gruen - blau, dieselbe Richtung wie die
-    # Rampe der PyMOL-Pipeline. Ein ausdrueckliches --color-scale gewinnt.
-    if args.color_scale is None:
-        args.color_scale = "RGB" if args.rainbow else "RWB"
+    # Nur fuer die Zusammenfassung - die Rampe selbst ist fest, siehe
+    # COLOR_SCALE in xyzToCubeToVMDVis.py.
+    color_scale = conv.COLOR_SCALE["rainbow" if args.rainbow else "redblue"]
 
     # Vor dem ersten chdir absolut machen: das Rendern laeuft im Molekuelordner,
     # ein relativer Pfad zeigte dort woandershin.
@@ -488,15 +484,14 @@ def main(argv=None):
             opacity=args.opacity,
             scale=(args.scale if str(args.scale) == "auto"
                    else float(args.scale)),
-            fill=args.fill, colorscale=args.color_scale,
-            rainbow=args.rainbow,
+            fill=args.fill, rainbow=args.rainbow,
             sources=", ".join(os.path.basename(c)
                               for c in e["cubes"].values()))
         print(f"    -> {tcl}   (Farbskala +/- {rng:.4f} a.u.)")
 
         row = {"prefix": name, "struct": e["struct"], "grid": e["grid"],
                "stats": e["stats"], "rng": rng, "iso": args.iso, "mode": mode,
-               "color_scale": args.color_scale, "opacity": args.opacity,
+               "color_scale": color_scale, "opacity": args.opacity,
                "ao": args.ao, "backgrounds": args.backgrounds,
                "made": {}, "size": None, "renderer": ""}
 
