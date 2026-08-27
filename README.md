@@ -104,12 +104,14 @@ python run_allVMD.py
 Without parameters `run_allVMD.py` runs on `reference/brombenzol/`. It converts,
 writes the scene, renders, and puts the images in
 `reference/brombenzol/images_check/` plus a summary in
-`reference/summary_check.csv`. The `_check` names are deliberate: the smoke test
+`reference/summary_check_<date>.csv`. The `_check` names are deliberate: the
+smoke test
 must never overwrite the committed reference files, otherwise you can no longer
 tell whether the reference is still the reference.
 
 Compare your `images_check/` with the committed `images/` and your
-`summary_check.csv` with `summary.csv`. On the decimated reference grid expect:
+`summary_check_<date>.csv` with `summary.csv`. On the decimated reference grid
+expect:
 
 | | |
 |---|---|
@@ -357,7 +359,7 @@ python ../../scripts/render_espVMD.py --vmd "C:\Program Files\VMD\vmd.exe"
 the axial view, where the line of sight crosses many transparent layers. The
 script then re-renders the missing views as an OpenGL window capture, which keeps
 the transparency, and only failing that as an opaque surface. Which pass produced
-which view is written into `*_settings.txt` and `summary.csv`. The window capture
+which view is written into `*_settings.txt` and the summary CSV. The window capture
 copies the OpenGL buffer, so the VMD window must be on screen and not covered
 while it runs.
 
@@ -400,7 +402,7 @@ python run_allVMD.py --root ../sandbox
 ```
 
 This converts what needs converting, writes an `esp.tcl` next to each molecule's
-cube files, renders every molecule and collects `summary.csv` at the root. Called
+cube files, renders every molecule and collects a dated `summary_<date>.csv` at the root. Called
 **without arguments** it runs on `reference/` instead, conducting the smoke test from §1.3.
 If you are too lazy for the --root option, just use the `reference/` folder as your sandbox
 
@@ -426,7 +428,7 @@ files, so no rendering is needed to find them.
 | `--backgrounds` | `white` | one or more background colours, passed through |
 | `--ao`, `--keep-tga`, `--dpi`, `--vmd` | | passed through |
 | `--images-dir` | `images` (`images_check` for the built-in reference run) | output folder inside each molecule folder |
-| `--summary` | `<root>/summary.csv` | path of the CSV summary |
+| `--summary` | `<root>/summary_DD-MM-YYYY.csv` | path of the CSV summary. The date keeps a later run from overwriting an earlier one; `--rainbow` adds `_rainbow`, the smoke test `_check`. |
 
 ### Examples
 
@@ -441,7 +443,7 @@ python run_allVMD.py --root ../sandbox --esp-range 0.0700
 python run_allVMD.py --root ../sandbox --only Pyridine Me-Pyr
 python run_allVMD.py --root ../sandbox --only "*benzol"
 
-# match the PyMOL figures exactly: take the value from their summary.csv
+# match the PyMOL figures exactly: take the value from their summary CSV
 python run_allVMD.py --root ../sandbox --esp-range 0.035
 
 # second image set with the rainbow ramp, standard set kept
@@ -481,10 +483,12 @@ With `--rainbow` the same names appear with `_rainbow` inserted
 overwrites the standard set.
 
 The smoke test writes the same files under `_check` names (`esp_check.tcl`,
-`images_check/`, `summary_check.csv`) so it can never overwrite the committed
-reference.
+`images_check/`, `summary_check_<date>.csv`) so it can never overwrite the
+committed reference.
 
-Per run, `run_allVMD.py` writes `summary.csv`:
+Per run, `run_allVMD.py` writes `summary_<DD-MM-YYYY>.csv`. A `--rainbow` run
+writes `summary_rainbow_<date>.csv` instead, so the two sets never overwrite
+each other:
 
 | Column | Content |
 |---|---|
@@ -496,12 +500,13 @@ Per run, `run_allVMD.py` writes `summary.csv`:
 | `VS_min_au`, `VS_max_au` | surface ESP extrema in a.u. |
 | `VS_min_kJ`, `VS_max_kJ` | the same in kJ/(mol·e) |
 | `esp_range_used_au`, `esp_range_mode` | colour range and how it was chosen |
+| `colormap` | `redblue`, or `rainbow` with `--rainbow` — the same column name as in the PyMOL summary |
 | `color_scale` | the VMD scale underneath the ramp: `RWB`, or `RGB` with `--rainbow` |
 | `opacity` | surface opacity used |
 | `resolution_px`, `renderer` | image size and the renderer of the first pass |
 | `ambient_occlusion` | whether ambient occlusion was on |
 | `backgrounds` | the background colours rendered |
-| `views` | per view, which pass produced it, e.g. `pi:Transparenz;edge:Transparenz, Fensterbild` |
+| `views` | per view, which pass produced it, e.g. `pi:transparency;edge:transparency, window capture` |
 
 Whatever colour range you choose, **state it in the figure caption** and ship
 `*_colorbar.png` with the figures. An ESP figure without its scale is
@@ -517,26 +522,27 @@ recommendation:
 
 ```
 [brombenzol]
-    V_S,min = -0.01882   V_S,max = +0.03154 a.u.  (38008 Punkte)  -> +/- 0.0350
+    V_S,min = -0.01882   V_S,max = +0.03154 a.u.  (38008 points)  -> +/- 0.0350
 ...
 [1] VMD: C:\Program Files\VMD\vmd.EXE
     Renderer: TachyonInternal
-    Ziel: images
-    == pi: beginne ==
+    Target: images
+    == pi: start ==
     -> images/brombenzol_pi.tga
-    == edge: beginne ==
-    Zweiter Anlauf fuer edge, sigma: Transparenz, Fensterbild
+    == edge: start ==
+    second attempt for edge, sigma: transparency, window capture
 ```
 
 Lines to read carefully:
 
-* `Zweiter Anlauf fuer …` Tachyon failed on those views and the fallback took
+* `second attempt for …` Tachyon failed on those views and the fallback took
   over. The images exist, but they were made differently; `*_settings.txt` says
-  how.
-* `! nicht gerendert: …` every pass failed for those views. `images/_vmd.log`
+  how. Which views this hits is not reproducible between runs.
+* `! not rendered: …` every pass failed for those views. `images/_vmd.log`
   has VMD's own output.
-* `! … schneidet ab` the fixed `--esp-range` is smaller than a molecule needs,
-  so values beyond it saturate and become indistinguishable in the picture.
+* `! The fixed scale … clips` the fixed `--esp-range` is smaller than a molecule
+  needs, so values beyond it saturate and become indistinguishable in the
+  picture.
 
 
 ---
@@ -569,7 +575,7 @@ VMD_esp_visualization/
 │   ├── esp_template.tcl          the VMD scene, with @@placeholders@@
 │   ├── render_espVMD.py          standard image set -> images/  (drives VMD)
 │   ├── render_esp.tcl            the VMD half: 3 views via Tachyon
-│   ├── run_allVMD.py             batch driver + summary.csv
+│   ├── run_allVMD.py             batch driver + dated summary CSV
 │   └── constants.py              unit conversions, shared by all scripts
 ├── reference/                    known-good example — output, not input
 │   ├── summary.csv
@@ -581,7 +587,7 @@ VMD_esp_visualization/
 ├── tools/
 │   └── make_reference.py         decimated reference set from a full folder
 ├── results/                      the delivered image set, seven molecules
-│   ├── summary.csv
+│   ├── summary_<date>.csv
 │   ├── Pyridine/  Me-Pyr/  CN-Pyr/  NO2-Pyr/   pyridines, provided
 │   ├── I-Pyr/  Cl-NO2-Pyr/                     Turbomole data
 │   ├── brombenzol/                             the halobenzene example

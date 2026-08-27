@@ -8,13 +8,16 @@ run_allVMD.py - batch run of the VMD pipeline
 
 Without --root the script runs on the reference dataset that ships with the
 repository. That is the self test: it writes to images_check/ and
-summary_check.csv so that the committed reference images stay untouched, and
-afterwards you compare your own numbers with those in reference/.
+summary_check_<date>.csv so that the committed reference images stay
+untouched, and afterwards you compare your own numbers with those in
+reference/.
 
 It walks a directory tree and does everything for each molecule folder in one
 go: pointval -> cube, write esp.tcl, render the three views with Tachyon, plus
-the colour bar and settings.txt. At the end there is a summary.csv with the
-statistics and the render parameters.
+the colour bar and settings.txt. At the end there is a dated
+summary_<DD-MM-YYYY>.csv with the statistics and the render parameters; a
+--rainbow run writes its own summary_rainbow_<date>.csv, so no run overwrites
+the summary of another.
 
 A molecule folder is any directory holding
 
@@ -56,6 +59,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime
 import fnmatch
 import os
 import sys
@@ -187,8 +191,32 @@ def ensure_cubes(entry, args):
 
 FIELDS = ["molecule", "structure", "grid", "iso_au", "shell_points",
           "VS_min_au", "VS_max_au", "VS_min_kJ", "VS_max_kJ",
-          "esp_range_used_au", "esp_range_mode", "color_scale", "opacity",
-          "resolution_px", "renderer", "ambient_occlusion", "backgrounds", "views"]
+          "esp_range_used_au", "esp_range_mode", "colormap", "color_scale",
+          "opacity", "resolution_px", "renderer", "ambient_occlusion",
+          "backgrounds", "views"]
+
+
+def summary_name(is_reference, rainbow, when=None):
+    """summary[_check][_rainbow]_DD-MM-YYYY.csv
+
+    Dated on purpose, so that a later run does not silently overwrite the
+    summary of an earlier one. The _rainbow part matters just as much: the
+    scene and the images already carry that suffix, and without it here the
+    CSV was the one file a --rainbow run clobbered - a run over one molecule
+    replaced the summary of the whole set, and the loss was invisible until
+    someone opened the file.
+
+    The same name is built in the sister project (run_all.py), so summaries
+    from the two pipelines can be filed next to each other.
+    """
+    stamp = (when or datetime.date.today()).strftime("%d-%m-%Y")
+    parts = ["summary"]
+    if is_reference:
+        parts.append("check")
+    if rainbow:
+        parts.append("rainbow")
+    parts.append(stamp)
+    return "_".join(parts) + ".csv"
 
 
 def write_summary(path, rows, common=None, advice=None):
@@ -210,6 +238,7 @@ def write_summary(path, rows, common=None, advice=None):
                 "VS_max_kJ": f"{s[1] * HARTREE_TO_KJ:.1f}" if s else "",
                 "esp_range_used_au": f"{r['rng']:.4f}",
                 "esp_range_mode": r["mode"],
+                "colormap": r["colormap"],
                 "color_scale": r["color_scale"],
                 "opacity": r["opacity"],
                 "resolution_px": (f"{r['size'][0]}x{r['size'][1]}"
@@ -367,7 +396,9 @@ def main(argv=None):
                    help="target folder inside each molecule folder (default: "
                         "'images', 'images_check' in the self test)")
     g.add_argument("--summary", default=None,
-                   help="path of the CSV (default: <root>/summary.csv)")
+                   help="path of the CSV (default: "
+                        "<root>/summary_DD-MM-YYYY.csv, with _check on the "
+                        "self test and _rainbow with --rainbow)")
     args = p.parse_args(argv)
     # For the recommendation at the end: the same call, only with a different
     # scale.
@@ -400,7 +431,7 @@ def main(argv=None):
     if is_reference:
         print("  Reference dataset (self test).")
         print(f"  Writes to '{args.images_dir}/', {scene_name} and "
-              f"summary_check.csv,")
+              f"{os.path.basename(summary_name(True, args.rainbow))},")
         print("  so that the committed reference files stay untouched.")
         print("  Afterwards compare your numbers with reference/summary.csv")
         print("  and your images with reference/*/images/.")
@@ -493,6 +524,7 @@ def main(argv=None):
 
         row = {"prefix": name, "struct": e["struct"], "grid": e["grid"],
                "stats": e["stats"], "rng": rng, "iso": args.iso, "mode": mode,
+               "colormap": "rainbow" if args.rainbow else "redblue",
                "color_scale": color_scale, "opacity": args.opacity,
                "ao": args.ao, "backgrounds": args.backgrounds,
                "made": {}, "size": None, "renderer": ""}
@@ -516,7 +548,7 @@ def main(argv=None):
         rows.append(row)
 
     summary = args.summary or os.path.join(
-        args.root, "summary_check.csv" if is_reference else "summary.csv")
+        args.root, summary_name(is_reference, args.rainbow))
     write_summary(summary, rows,
                   common=None if mode == "auto" else common,
                   advice=needed if mode == "auto" else None)
