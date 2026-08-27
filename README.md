@@ -1,4 +1,4 @@
-# ESP Visualization — VMD
+# ESP Visualization 
 
 **User Guide for deploying the VMD ESP Visualization Tool**
 
