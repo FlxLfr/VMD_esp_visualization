@@ -226,10 +226,10 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
             f"V_S,max           : {vmax:+.5f} a.u. "
             f"({vmax * HARTREE_TO_KJ:+.1f} kJ/(mol*e))",
             (f"Schalenpunkte     : {npts}" if npts else ""),
-            "                    (Gitterpunkte auf der Schale, nicht "
-            "interpoliert -",
-            "                     zum Zitieren die Werte der PyMOL-Pipeline "
-            "nehmen)",
+            "                    (Gitterpunkte im Band rho = iso +/- 12 %,",
+            "                     dieselbe Rechnung wie in der PyMOL-Pipeline",
+            "                     und dieselben Zahlen. Das sigma-Loch wird",
+            "                     nur dort bestimmt, nicht hier.)",
         ]
     lines += [
         f"Farbskala         : {-rng:+.4f} .. {rng:+.4f} a.u.",

@@ -1,4 +1,4 @@
-# ESP Visualization
+# ESP Visualization — VMD
 
 **User Guide for deploying the VMD ESP Visualization Tool**
 
@@ -7,13 +7,15 @@ This repository is the continuation of
 It is a **visualisation tool only**: it turns Turbomole `pointval` output into
 the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 
-> **The σ-hole potential is computed in the PyMOL project, not here.** Locating
-> the σ-hole maximum needs trilinear interpolation onto the isosurface, and that
-> code is written, parameter-studied and documented over there. This pipeline
-> computes only V_S,min and V_S,max on the ρ = 0.001 a.u. shell, because without
-> them there is no colour scale and therefore no meaningful picture. **Quote the
-> PyMOL numbers.** The ones here size a colour bar. What else the sister project
-> can do is listed in [section 9](#9-what-the-pymol-pipeline-does-and-this-one-does-not).
+> **The σ-hole potential is computed in the PyMOL project, not here.** Finding
+> the σ-hole maximum needs trilinear interpolation along the C–X axis, and that
+> code is written, parameter-studied and documented over there — **quote the
+> PyMOL numbers for it.** V_S,min and V_S,max are computed here too, from the
+> grid points in the ρ = iso ± 12 % band, using the same constants as the sister
+> project: same code path, same numbers, which is what the smoke test in §1.3
+> verifies. Without them there would be no colour scale and therefore no
+> meaningful picture. The full list of what the sister project does and this one
+> does not is [section 9](#9-what-the-pymol-pipeline-does-and-this-one-does-not).
 
 | Aspect | Details |
 |---|---|
@@ -53,6 +55,9 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 8. [Repository layout](#8-repository-layout)
 9. [What the PyMOL pipeline does and this one does not](#9-what-the-pymol-pipeline-does-and-this-one-does-not)
 
+Everything that is background rather than instruction — why a second pipeline
+exists at all, how the two viewers differ mechanically, the choice of VMD
+version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
 
 ---
 
@@ -685,15 +690,30 @@ it runs.
 
 | | PyMOL | VMD (here) |
 |---|---|---|
-| V_S,min / V_S,max | interpolated onto the ρ = 0.001 isosurface | from grid points *near* the shell |
+| V_S,min / V_S,max | grid points in the ρ = iso ± 12 % band | **the same**, same code, same numbers |
 | Which atom carries the extremum | reported (`VS_max_on`, `VS_min_on`) | not determined |
 | σ-hole potential | located per halogen, ray-based or point-based | **not computed** |
 | Halogen belt minimum | reported | not computed |
 | Several halogens | all evaluated, ranked, the strongest drives the σ view | first halogen drives the σ view |
 | Units in the summary | a.u., kcal/(mol·e), kJ/(mol·e) | a.u., kJ/(mol·e) |
 
-The values that both do report agree to every digit on the shared reference
-dataset, which is what §1.3 checks.
+The first row is not a difference: both pipelines take V_S,min and V_S,max from
+the grid points whose density falls inside ρ = iso ± 12 % — literally the same
+few lines, which is why the numbers agree to every digit on the shared reference
+dataset, and why §1.3 works as a cross-check at all.
+
+Trilinear interpolation happens in the sister project **only for the σ-hole**,
+along rays from the halogen, and it is needed there because the σ-hole is a peak
+on one axis: whether a grid point happens to sit both on that axis and inside
+the thin shell is luck. For bromobenzene the best grid point lay 1.14 Bohr off
+the axis and came out 28 % low. A global extremum over a large surface does not
+have that problem, which is why nothing is interpolated for V_S in either
+project.
+
+Neither the shell band nor the interpolation feeds the picture. Both viewers
+build the isosurface themselves and interpolate the potential onto their own
+vertices — `cmd.isosurface` plus `ramp_new`/`surface_color` in PyMOL, the
+`Isosurface` rep coloured by `Volume` here.
 
 **Workflow.** PyMOL has `--two-pass`, which renders once to find the common
 colour scale and again to use it. Here that is a printed recommendation and a

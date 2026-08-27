@@ -45,10 +45,11 @@ summary.csv uebernehmen.
 
 Nicht enthalten
 ---------------
-Kein sigma-Loch, keine trilineare Interpolation auf die Isoflaeche - das steht
-im Schwesterprojekt und wird hier nicht ein zweites Mal implementiert. Die
-Kennzahlen hier stammen von Gitterpunkten nahe der Schale und dienen der
-Farbskala; zitiert werden die Werte der PyMOL-Pipeline.
+Kein sigma-Loch, keine trilineare Interpolation entlang der C-X-Achse - das
+steht im Schwesterprojekt und wird hier nicht ein zweites Mal implementiert.
+V_S,min und V_S,max dagegen schon, und zwar aus denselben Gitterpunkten im Band
+rho = iso +/- 12 % wie drueben: derselbe Rechenweg, dieselben Zahlen. Zitieren
+muss man die PyMOL-Werte nur fuers sigma-Loch.
 """
 
 from __future__ import annotations

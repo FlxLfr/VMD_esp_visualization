@@ -11,12 +11,18 @@ Isoflaeche der Elektronendichte erzeugt und sie nach dem elektrostatischen
 Potential einfaerbt. Die Szene selbst steht in esp_template.tcl daneben.
 
 Umfang: Fuer die Farbskala werden V_S,min und V_S,max auf der rho=iso-Schale
-bestimmt - ohne die Skala kein sinnvolles Bild. Bewusst NICHT enthalten sind
-sigma-Loch-Potential und trilineare Interpolation auf die Isoflaeche; die
-stehen im Schwesterprojekt Pymol_esp_visualization und waeren hier ein zweites,
-unabhaengig gepflegtes Exemplar derselben Zahlen. Die Werte hier stammen von
-Gitterpunkten nahe der Schale, nicht von der interpolierten Flaeche - fuer die
-Farbskala genau richtig, zum Zitieren nimm die Zahlen aus der PyMOL-Pipeline.
+bestimmt - ohne die Skala kein sinnvolles Bild. Genommen werden dafuer die
+Gitterpunkte im Band rho = iso +/- 12 %, mit denselben Konstanten wie
+xyzToCube.py im Schwesterprojekt Pymol_esp_visualization. Es ist derselbe
+Rechenweg, und die Zahlen stimmen entsprechend ueberein - genau das prueft der
+Selbsttest.
+
+Bewusst NICHT enthalten ist das sigma-Loch. Es zu finden verlangt trilineare
+Interpolation entlang der C-X-Achse, und dieser Code steht drueben,
+parameterstudiert und dokumentiert; ein zweites, unabhaengig gepflegtes
+Exemplar davon waere genau die Art Duplikat, die unbemerkt auseinanderlaeuft.
+Fuer sigma-Loch-Werte also in die PyMOL-Pipeline schauen. V_S,min und V_S,max
+sind hier dieselben.
 
 Zwei Stolpersteine im Datenformat, die das Skript abfaengt:
   1. Achsenreihenfolge - Turbomole variiert x am schnellsten, Cube z.
