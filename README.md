@@ -25,12 +25,12 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 | Manual steps | Installing VMD, establishing a conda environment and firing a command |
 
 <p align="center">
-  <img src="reference/brombenzol/images/brombenzol_pi.png" width="32%" alt="pi face">
-  <img src="reference/brombenzol/images/brombenzol_sigma.png" width="32%" alt="sigma hole">
-  <img src="reference/brombenzol/images/brombenzol_edge.png" width="32%" alt="in-plane profile">
+  <img src="results/brombenzol/brombenzol_pi.png" width="32%" alt="pi face">
+  <img src="results/brombenzol/brombenzol_sigma.png" width="32%" alt="sigma hole">
+  <img src="results/brombenzol/brombenzol_edge.png" width="32%" alt="in-plane profile">
 </p>
 <p align="center">
-  <img src="reference/brombenzol/images/brombenzol_colorbar.png" width="42%" alt="colour scale">
+  <img src="results/brombenzol/brombenzol_colorbar.png" width="42%" alt="colour scale">
 </p>
 
 <p align="center"><em>Bromobenzene: π face, view along the C–Br axis (σ-hole), in-plane profile, and the colour scale that belongs to them.</em></p>
@@ -67,8 +67,8 @@ registration) and take **Version 1.9.4, "Windows 64-bit, CUDA, OptiX, OSPray"**.
 VMD is not a conda package and the Windows installer does **not** put it on the
 `PATH`. The scripts find it anyway: they check the `PATH`, then the `VMDDIR`
 environment variable that the installer does set, then the usual install
-folders. Only if all three fail the path needs to be set manually:`--vmd "C:\Program Files\VMD\vmd.exe"`
-how to set the path permanently is described in the "Getting VMD onto the PATH (Windows)" section in the /docs/details.docx
+folders. Only if all three fail the path needs to be set manually: `--vmd "C:\Program Files\VMD\vmd.exe"`
+how to set the path permanently is described in the "Getting VMD onto the PATH (Windows)" section in the /docs/Details.docx
 
 ### 1.2 Create the environment
 
