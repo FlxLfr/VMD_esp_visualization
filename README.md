@@ -7,10 +7,9 @@ This repository is the continuation of
 It is a **visualisation tool only**: it turns Turbomole `pointval` output into
 the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 
-> **The σ-hole potential is computed in the PyMOL project, not here.** Finding
+> **The σ-hole potential is computed exclusively in the PyMOL project, not here.** Finding
 > the σ-hole maximum needs trilinear interpolation along the C–X axis, and that
-> code is written, parameter-studied and documented over there — **quote the
-> PyMOL numbers for it.** V_S,min and V_S,max are computed here too, from the
+> code is written, parameter-studied and documented over there. V_S,min and V_S,max are computed here too, from the
 > grid points in the ρ = iso ± 12 % band, using the same constants as the sister
 > project: same code path, same numbers, which is what the smoke test in §1.3
 > verifies. Without them there would be no colour scale and therefore no
@@ -33,7 +32,7 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
   <img src="reference/brombenzol/images/brombenzol_colorbar.png" width="42%" alt="colour scale">
 </p>
 
-<p align="center"><em>Bromobenzene: π face, view along the C–Br axis (σ-hole), in-plane profile, and the colour scale that belongs to them. These are the committed reference images, rendered from the decimated reference grid.</em></p>
+<p align="center"><em>Bromobenzene: π face, view along the C–Br axis (σ-hole), in-plane profile, and the colour scale that belongs to them.</em></p>
 
 ---
 
@@ -55,10 +54,6 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 8. [Repository layout](#8-repository-layout)
 9. [What the PyMOL pipeline does and this one does not](#9-what-the-pymol-pipeline-does-and-this-one-does-not)
 
-Everything that is background rather than instruction — why a second pipeline
-exists at all, how the two viewers differ mechanically, the choice of VMD
-version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
-
 ---
 
 ## 1. Installation
@@ -68,20 +63,17 @@ version, and the renderer quirks worth knowing — is in `docs/Details.docx`.
 Download from the
 [TCBG test release page](https://www.ks.uiuc.edu/Research/vmd/alpha/) (free
 registration) and take **Version 1.9.4, "Windows 64-bit, CUDA, OptiX, OSPray"**.
-The page labels it "Windows 10"; that is the tested minimum, not an upper limit,
-and it runs on Windows 11 natively. Version 2.0.0 exists as a monthly alpha and
-is deliberately not used here — see `docs/Details.docx`.
 
 VMD is not a conda package and the Windows installer does **not** put it on the
 `PATH`. The scripts find it anyway: they check the `PATH`, then the `VMDDIR`
 environment variable that the installer does set, then the usual install
-folders. Only if all three fail do you need `--vmd "C:\Program Files\VMD\vmd.exe"`
-or a `PATH` entry — the PowerShell snippet for that is in `docs/Details.docx`.
+folders. Only if all three fail the path needs to be set manually:`--vmd "C:\Program Files\VMD\vmd.exe"`
+how to set the path permanently is described in the "Getting VMD onto the PATH (Windows) section in the /docs/details.docx
 
 ### 1.2 Create the environment
 
 This assumes a working conda; if you have none, follow §1.1 of the PyMOL
-project's README first — it is the same installation.
+project's README first.
 
 ```bash
 conda env create -f environment.yml
@@ -93,9 +85,6 @@ conda activate esp-vmd
 | `numpy` | everything, grid handling in all scripts |
 | `matplotlib` | the separate `*_colorbar.png` only |
 | `pillow` | converting VMD's TGA output to PNG |
-
-The `esp-pymol` environment from the sister project works just as well — it
-already has all three, and VMD does not come from conda either way.
 
 ### 1.3 Verify & Smoketest
 
@@ -136,10 +125,8 @@ test: it cross-checks the two pipelines, not just this one. If your numbers
 match, the installation is sound and any remaining difference between the two
 image sets is the viewer, not the data.
 
-The reference grid is decimated to 0.60 Bohr — five times coarser than the
-delivered data — and is far too coarse for a V_S value you would quote. It
-answers "does the installation run and do the documented numbers come out", not
-"how big is the σ-hole".
+The reference grid is decimated to 0.60 Bohr and is far too coarse for a V_S value you would quote. It only
+answers "does the installation run and do the documented numbers come out".
 
 ---
 
@@ -185,10 +172,6 @@ that one file. There is no second source of coordinates that could disagree with
 the grid, so the classic "molecule floats next to its own surface" failure mode
 does not exist here.
 
-Do not try to open the Turbomole-derived `.xyz` files in VMD directly — they have
-no XYZ header, and VMD's reader aborts with "Unable to load molecule". Load the
-cube instead; it carries the atoms.
-
 ---
 
 ## 3. One molecule, step by step
@@ -211,7 +194,7 @@ not from the file name. Expect a minute or two per grid.
 
 | Argument | Meaning |
 |---|---|
-| `grids` | one or more Turbomole `pointval` files, e.g. `td.xyz tp.xyz`. Any number can be given; each produces one `.cube` next to it (or in `--outdir`). Existing `.cube` files are accepted here too, which is what `--tcl-only` uses. |
+| `grids` | one or more Turbomole `pointval` files, e.g. `td.xyz tp.xyz`.|
 
 #### Options that change the **cube files**
 
@@ -229,10 +212,10 @@ not from the file name. Expect a minute or two per grid.
 |---|---|---|
 | `--tcl-only` | off | rewrite `esp.tcl` from the existing cubes, touching no grid. Sub-second instead of minutes. |
 | `--no-vmd` | off | cubes only, no scene. |
-| `--esp-range` | `auto` | half-width of the colour scale in a.u., or `auto` — derived from V_S,min/V_S,max on the shell. |
+| `--esp-range` | `auto` | half-width of the colour scale in a.u., or if not set, it is derived from V_S,min/V_S,max on the shell. |
 | `--iso` | `0.001` | isovalue of the density surface drawn in the scene. |
 | `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
-| `--scale` | `auto` | zoom, a number or `auto` — from the molecule's size and the window height. |
+| `--scale` | `auto` | zoom, a number or `auto`, derived from the molecule's size and the window height. |
 | `--fill` | `0.85` | fraction of the image height the molecule fills at `--scale auto`. |
 | `--color-scale` | `RWB` (`RGB` with `--rainbow`) | VMD colour scale. `RWB` is red-negative; `BWR` reverses it. An explicit value wins over `--rainbow`. |
 | `--rainbow` | off | rainbow ramp instead of red–white–blue; writes `esp_rainbow.tcl` so the standard scene survives. |
