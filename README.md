@@ -14,7 +14,8 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 > project: same code path, same numbers, which is what the smoke test in §1.3
 > verifies. Without them there would be no colour scale and therefore no
 > meaningful picture. The full list of what the sister project does and this one
-> does not is [section 9](#9-what-the-pymol-pipeline-does-and-this-one-does-not).
+> does not, together with a side-by-side comparison of the images and the
+> surface numbers, is in `docs/ComparisonVMDPyMolOutput.docx`.
 
 | Aspect | Details |
 |---|---|
@@ -52,7 +53,6 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 6. [Console output](#6-console-output)
 7. [Create Tp.xyz, Td.xyz and a structure file from a SMILES notation](#7-create-tpxyz-tdxyz-and-a-structure-file-from-a-smiles-notation)
 8. [Repository layout](#8-repository-layout)
-9. [What the PyMOL pipeline does and this one does not](#9-what-the-pymol-pipeline-does-and-this-one-does-not)
 
 ---
 
@@ -580,9 +580,20 @@ VMD_esp_visualization/
 │       └── images/               reference images
 ├── tools/
 │   └── make_reference.py         decimated reference set from a full folder
+├── results/                      the delivered image set, seven molecules
+│   ├── summary.csv
+│   ├── Pyridine/  Me-Pyr/  CN-Pyr/  NO2-Pyr/   pyridines, provided
+│   ├── I-Pyr/  Cl-NO2-Pyr/                     Turbomole data
+│   ├── brombenzol/                             the halobenzene example
+│   ├── brombenzol_rainbow/                     the same molecule, --rainbow
+│   └── <molecule>/               *_pi.png, *_sigma.png, *_edge.png,
+│                                 *_colorbar.png, *_settings.txt
 ├── docs/
-│   └── Details.docx              background: why VMD, viewer mechanics,
-│                                 version choice, renderer quirks
+│   ├── Details.docx              background: why VMD, viewer mechanics,
+│   │                             version choice, renderer quirks
+│   └── ComparisonVMDPyMolOutput.docx
+│                                 PyMOL and VMD output side by side:
+│                                 numbers, images, and what only PyMOL does
 └── sandbox/                      your own data and experiments, not tracked
 ```
 
@@ -612,53 +623,3 @@ would skip exactly those.
 
 **The scene lives in its own file.** `esp_template.tcl` is real Tcl with
 `@@placeholder@@` markers that the Python script fills in, not a Python string.
-
----
-
-## 9. What the PyMOL pipeline does and this one does not
-
-This repository draws pictures. The sister project draws pictures *and* measures
-the surface. The gap is deliberate, a second implementation of the measurement
-would be a duplicate.
-
-**Quantities.** Only the PyMOL pipeline locates and reports the σ-hole.
-
-| | PyMOL | VMD (here) |
-|---|---|---|
-| V_S,min / V_S,max | grid points in the ρ = iso ± 12 % band | **the same**, same code, same numbers |
-| Which atom carries the extremum | reported (`VS_max_on`, `VS_min_on`) | not determined |
-| σ-hole potential | located per halogen, ray-based or point-based | **not computed** |
-| Halogen belt minimum | reported | not computed |
-| Several halogens | all evaluated, ranked, the strongest drives the σ view | first halogen drives the σ view |
-| Units in the summary | a.u., kcal/(mol·e), kJ/(mol·e) | a.u., kJ/(mol·e) |
-
-The first row is not a difference: both pipelines take V_S,min and V_S,max from
-the grid points whose density falls inside ρ = iso ± 12 %.
-
-Trilinear interpolation happens in the sister project **only for the σ-hole**,
-along rays from the halogen, and it is needed there because the σ-hole is a peak
-on one axis: whether a grid point happens to sit both on that axis and inside
-the thin shell is luck. For bromobenzene the best grid point lay 1.14 Bohr off
-the axis and came out 28 % low. A global extremum over a large surface does not
-have that problem, which is why nothing is interpolated for V_S in either
-project.
-
-Neither the shell band nor the interpolation feeds the picture. Both viewers
-build the isosurface themselves and interpolate the potential onto their own
-vertices. `cmd.isosurface` plus `ramp_new`/`surface_color` in PyMOL, the
-`Isosurface` rep coloured by `Volume` here.
-
-**Workflow.** PyMOL has `--two-pass`, which renders once to find the common
-colour scale and again to use it. Here that is a printed recommendation and a
-second command you start yourself.
-
-**Reliability.** PyMOL's ray tracer renders every view of every molecule in this
-set without complaint. VMD's Tachyon aborts on roughly a third of the views.
-Stacked transparent layers, heap corruption, no error message and the images
-survive only because of the fallback chain in §3.3. That difference is itself a
-result and is documented in `docs/Details.docx`.
-
-**Supporting material.** The sister project also carries the parameter studies
-(`tools/iso_sweep.py`, `tools/stride_sweep.py`), the test-data generator from
-§7, the delivered image sets for all nine molecules under `results/`, and the
-background document with method, results and references.
