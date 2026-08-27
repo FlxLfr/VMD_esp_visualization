@@ -217,7 +217,6 @@ not from the file name. Expect a minute or two per grid.
 | `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
 | `--scale` | `auto` | zoom, a number or `auto`, derived from the molecule's size and the window height. |
 | `--fill` | `0.85` | fraction of the image height the molecule fills at `--scale auto`. |
-| `--color-scale` | `RWB` (`RGB` with `--rainbow`) | VMD colour scale. `RWB` is red-negative; `BWR` reverses it. An explicit value wins over `--rainbow`. |
 | `--rainbow` | off | rainbow ramp instead of red–white–blue; writes `esp_rainbow.tcl` so the standard scene survives. |
 
 #### Examples
@@ -458,7 +457,6 @@ small and the run says so: which molecules it clips, and what they would need.
 | `--iso` | `0.001` | density isovalue, passed through |
 | `--opacity` | `0.50` | passed through |
 | `--scale`, `--fill` | `auto`, `0.85` | zoom, passed through |
-| `--color-scale` | `RWB` (`RGB` with `--rainbow`) | passed through |
 | `--rainbow` | off | rainbow ramp; writes `esp_rainbow.tcl` and a separate `<molecule>_rainbow_*` set |
 | `--no-render` | off | convert and write the scene only |
 | `--res` | `1600x1280` | passed through |
@@ -535,7 +533,8 @@ Per run, `run_allVMD.py` writes `summary.csv`:
 | `VS_min_au`, `VS_max_au` | surface ESP extrema in a.u. |
 | `VS_min_kJ`, `VS_max_kJ` | the same in kJ/(mol·e) |
 | `esp_range_used_au`, `esp_range_mode` | colour range and how it was chosen |
-| `color_scale`, `opacity` | scene settings |
+| `color_scale` | the VMD scale underneath the ramp: `RWB`, or `RGB` with `--rainbow` |
+| `opacity` | surface opacity used |
 | `resolution_px`, `renderer` | image size and the renderer of the first pass |
 | `ambient_occlusion` | whether ambient occlusion was on |
 | `backgrounds` | the background colours rendered |
