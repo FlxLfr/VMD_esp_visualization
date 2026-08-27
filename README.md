@@ -256,7 +256,7 @@ go wrong:
   only when complete, so a run stopped halfway cannot leave a half file with a
   valid header behind.
 * **The view orientation.** The three standard views are computed from the
-  geometry — ring normal, C–halogen axis — and baked into `esp.tcl` as rotation
+  geometry and baked into `esp.tcl` as rotation
   matrices. Same calculation as the PyMOL pipeline, so both image sets show the
   same thing.
 
@@ -277,16 +277,13 @@ cd {C:/path/to/molecule}
 source esp.tcl
 ```
 
-Forward slashes and braces, not backslashes — Tcl reads `\` as an escape
-character.
-
 The script loads both cubes into one molecule ID, builds the ρ = 0.001
 isosurface from the density and colours it by the potential. The skeleton comes
 from the cube's own atom block, so it cannot be misaligned.
 
-These commands are defined by the scene:
+These commands are defined by the scene, execute them in the Tk Console (`Extensions → Tk Console`):
 
-| Command | Effect |
+| Live Command | Effect |
 |---|---|
 | `esp_view pi \| edge \| sigma` | the three standard views |
 | `esp_iso <value>` | change the isovalue live |
@@ -296,10 +293,6 @@ These commands are defined by the scene:
 
 Tune with the live commands first, then bake the value you settled on into the
 file with `--tcl-only`, so the scene reproduces itself.
-
-`esp.tcl` always carries the colour scale that was actually used for that
-molecule's images, plus the axis the σ view follows, so what you see
-interactively matches the figure set.
 
 ---
 
@@ -323,9 +316,7 @@ Three views are produced, oriented **from the molecular geometry**:
 | `*_sigma.png` | along the C–halogen axis, from outside | **the σ-hole, head on** |
 | `*_edge.png` | in the molecular plane | overall profile |
 
-Every molecule therefore lands in the same orientation automatically — that is
-what makes an image set comparable, and it is why no manual rotation is needed or
-wanted. For molecules without a halogen, `*_sigma.png` looks down the longest
+Every molecule therefore lands in the same orientation automatically. For molecules without a halogen, `*_sigma.png` looks down the longest
 principal axis instead; read the file name as "axial view" in that case.
 
 #### Options
@@ -366,8 +357,7 @@ python ../../scripts/render_espVMD.py --vmd "C:\Program Files\VMD\vmd.exe"
 the axial view, where the line of sight crosses many transparent layers. The
 script then re-renders the missing views as an OpenGL window capture, which keeps
 the transparency, and only failing that as an opaque surface. Which pass produced
-which view is written into `*_settings.txt` and `summary.csv` — when a figure was
-made a different way, that must not disappear from the record. The window capture
+which view is written into `*_settings.txt` and `summary.csv`. The window capture
 copies the OpenGL buffer, so the VMD window must be on screen and not covered
 while it runs.
 
@@ -375,23 +365,17 @@ while it runs.
 and neither has PyMOL, so both pipelines draw it the same way, as a separate PNG.
 
 **On `--rainbow`.** The ramp is **the same five anchor colours as the PyMOL
-pipeline** — red, yellow, green, cyan, blue, red for negative as always. That
-takes one trick: `color scale method` only accepts three anchors (smallest,
-middle, largest), and three give red–green–blue with muddy olive and teal in
-between, which is a different ramp, not the same one. VMD's colour scale is,
-however, a table of 1024 colours whose ids start behind the named colours
+pipeline**: red, yellow, green, cyan, blue. VMD's colour scale is, a table of 1024 colours whose ids start behind the named colours
 (`colorinfo num`), and each one can be set with `color change rgb`. The
 generated scene does exactly that, in `esp_ramp`, right after setting the base
-method — a later `color scale method` would rebuild the table and undo it.
+method.
 
 So the rainbow images and their colour bar match their PyMOL counterparts
-anchor for anchor. Red–white–blue still uses VMD's built-in `RWB`, whose ends
-are pure red and blue against PyMOL's slightly darker `#d40000` / `#0030d4`;
-aligning that too would mean re-rendering every standard image set.
+anchor for anchor. Red–white–blue still uses VMD's built-in `RWB`.
 
 Rainbow output never collides with the standard set: the scene is
 `esp_rainbow.tcl`, the images are `<prefix>_rainbow_pi.png` and so on. Use it as
-a second, alternative set — red–white–blue stays the one to publish, because a
+a second, alternative set. Red–white–blue stays the one to publish, because a
 rainbow ramp has no perceptually neutral midpoint and invites reading structure
 into the intermediate colours that is not in the data.
 
@@ -399,8 +383,7 @@ into the intermediate colours that is not in the data.
 
 ## 4. Several molecules at once (`run_allVMD.py`)
 
-Put each molecule in its own folder under a common root — for your own data that
-is `sandbox/`, which git ignores:
+Put each molecule in its own folder under a common root, use `sandbox/` for your own data sets, git ignores that one:
 
 ```
 sandbox/
@@ -418,31 +401,11 @@ python run_allVMD.py --root ../sandbox
 
 This converts what needs converting, writes an `esp.tcl` next to each molecule's
 cube files, renders every molecule and collects `summary.csv` at the root. Called
-**without arguments** it runs on `reference/` instead — the smoke test from §1.3.
+**without arguments** it runs on `reference/` instead, conducting the smoke test from §1.3.
+If you are too lazy for the --root option, just use the `reference/` folder as your sandbox
 
 **It analyses first and renders once.** V_S,min and V_S,max come out of the cube
 files, so no rendering is needed to find them.
-
-**No second pass — a recommendation instead.** Images are only comparable on one
-shared scale, and the PyMOL pipeline renders twice to get there (`--two-pass`).
-In VMD an image costs a minute or two, so the first set would be waste. Every run
-therefore ends with the smallest scale that covers all molecules, and the
-ready-made command line to render with it:
-
-```
-Jedes Molekuel hat seine eigene Skala - 0.0350, 0.0500, 0.0700 a.u.
-Nebeneinanderlegen darf man die Bilder so NICHT.
-Kleinster Wert, der alle abdeckt: +/- 0.0700 a.u.
-Zum Rendern eines vergleichbaren Satzes:
-
-    python run_allVMD.py --root ../sandbox --esp-range 0.0700
-```
-
-You read it, decide what the figure should show, and start the run that counts —
-the smallest scale that clips nothing is not always the most informative one. A
-single molecule with a very negative oxygen flattens the contrast of every other
-molecule in the set, and that is a judgement call. Set a fixed value that is too
-small and the run says so: which molecules it clips, and what they would need.
 
 ### Options
 
@@ -450,7 +413,7 @@ small and the run says so: which molecules it clips, and what they would need.
 |---|---|---|
 | `--root` | `reference/` | directory tree to search for molecule folders |
 | `--only NAME …` | all | restrict the run to these folders; simple wildcards allowed, e.g. `--only Pyridine '*-Pyr'` |
-| `--stride N` | `1` | grid decimation **during conversion**. Ignored when the cube files already exist — use `--force-convert` to rebuild them. |
+| `--stride N` | `1` | grid decimation **during conversion**. Ignored when the cube files already exist, use `--force-convert` to rebuild them. |
 | `--struct-unit {angstrom,bohr}` | `angstrom` | as in the converter; `.xyz` only |
 | `--force-convert` | off | rewrite cube files even if they already exist |
 | `--esp-range` | `auto` | `auto` (each molecule on its own scale), a fixed value in a.u., or `common` (one scale for all, straight from this run) |
@@ -493,7 +456,7 @@ python run_allVMD.py
 
 > **Do not put a common colour scale across data of different provenance.** One
 > scale for the whole run is only meaningful if the molecules were computed the
-> same way — same geometry optimisation, same method, same basis set. Use
+> same way. Same geometry optimisation, same method, same basis set. Use
 > `--only` or separate root folders to keep groups apart.
 
 ---
@@ -567,17 +530,14 @@ recommendation:
 
 Lines to read carefully:
 
-* `Zweiter Anlauf fuer …` — Tachyon failed on those views and the fallback took
+* `Zweiter Anlauf fuer …` Tachyon failed on those views and the fallback took
   over. The images exist, but they were made differently; `*_settings.txt` says
   how.
-* `! nicht gerendert: …` — every pass failed for those views. `images/_vmd.log`
+* `! nicht gerendert: …` every pass failed for those views. `images/_vmd.log`
   has VMD's own output.
-* `! … schneidet ab` — the fixed `--esp-range` is smaller than a molecule needs,
+* `! … schneidet ab` the fixed `--esp-range` is smaller than a molecule needs,
   so values beyond it saturate and become indistinguishable in the picture.
 
-The scripts here print in plain text; unlike the PyMOL pipeline there is no ANSI
-colouring and no `--no-color`, because a VMD batch run is dominated by VMD's own
-output anyway.
 
 ---
 
@@ -591,8 +551,8 @@ file from a SMILES string:
 Pymol_esp_visualization/tools/CreateTpTdFromSmiles.py
 ```
 
-Its output is good enough to exercise the pipeline end to end and nothing more —
-do not read numbers off it. Running it needs a separate environment; see
+Its output is good enough to exercise the pipeline end to end and nothing more.
+Do not read numbers off it. Running it needs a separate environment; see
 `tools/environment-testdata.yml` and `tools/README.txt` in that repository.
 
 ---
@@ -637,7 +597,7 @@ known-good example and is committed; `sandbox/` is where your own molecules and
 the large raw data live, and git ignores it entirely. If a run goes wrong,
 `reference/` tells you whether the problem is your installation or your data. Its
 decimated grids are the one exception to the rule above and are tracked on
-purpose — that is what makes a fresh clone self-testing. Rebuild them, or make a
+purpose. That is what makes a fresh clone self-testing. Rebuild them, or make a
 set for another molecule, with:
 
 ```bash
@@ -651,22 +611,15 @@ and index reordering are the steps most likely to break, and ready-made cubes
 would skip exactly those.
 
 **The scene lives in its own file.** `esp_template.tcl` is real Tcl with
-`@@placeholder@@` markers that the Python script fills in, not a Python string —
-that keeps syntax highlighting and makes escaping mistakes visible.
-
-The name `xyzToCubeToVMDVis.py` is deliberately not `xyzToCube.py`: the PyMOL
-project has a script by that name with a different feature set, and two files
-with one name in two repositories is how the wrong one gets edited.
+`@@placeholder@@` markers that the Python script fills in, not a Python string.
 
 ---
 
 ## 9. What the PyMOL pipeline does and this one does not
 
 This repository draws pictures. The sister project draws pictures *and* measures
-the surface. The gap is deliberate — a second implementation of the measurement
-would be a duplicate nobody notices drifting until two chapters of the same
-thesis quote different numbers for the same molecule — but you should know where
-it runs.
+the surface. The gap is deliberate, a second implementation of the measurement
+would be a duplicate.
 
 **Quantities.** Only the PyMOL pipeline locates and reports the σ-hole.
 
@@ -680,9 +633,7 @@ it runs.
 | Units in the summary | a.u., kcal/(mol·e), kJ/(mol·e) | a.u., kJ/(mol·e) |
 
 The first row is not a difference: both pipelines take V_S,min and V_S,max from
-the grid points whose density falls inside ρ = iso ± 12 % — literally the same
-few lines, which is why the numbers agree to every digit on the shared reference
-dataset, and why §1.3 works as a cross-check at all.
+the grid points whose density falls inside ρ = iso ± 12 %.
 
 Trilinear interpolation happens in the sister project **only for the σ-hole**,
 along rays from the halogen, and it is needed there because the σ-hole is a peak
@@ -694,17 +645,16 @@ project.
 
 Neither the shell band nor the interpolation feeds the picture. Both viewers
 build the isosurface themselves and interpolate the potential onto their own
-vertices — `cmd.isosurface` plus `ramp_new`/`surface_color` in PyMOL, the
+vertices. `cmd.isosurface` plus `ramp_new`/`surface_color` in PyMOL, the
 `Isosurface` rep coloured by `Volume` here.
 
 **Workflow.** PyMOL has `--two-pass`, which renders once to find the common
 colour scale and again to use it. Here that is a printed recommendation and a
-second command you start yourself, because a VMD image costs a minute or two and
-the first set would be thrown away.
+second command you start yourself.
 
 **Reliability.** PyMOL's ray tracer renders every view of every molecule in this
-set without complaint. VMD's Tachyon aborts on roughly a third of the views —
-stacked transparent layers, heap corruption, no error message — and the images
+set without complaint. VMD's Tachyon aborts on roughly a third of the views.
+Stacked transparent layers, heap corruption, no error message and the images
 survive only because of the fallback chain in §3.3. That difference is itself a
 result and is documented in `docs/Details.docx`.
 
