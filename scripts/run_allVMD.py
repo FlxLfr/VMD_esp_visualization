@@ -1,55 +1,55 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-run_allVMD.py - Stapellauf der VMD-Pipeline
+run_allVMD.py - batch run of the VMD pipeline
 
-    python run_allVMD.py                 # Selbsttest auf reference/
+    python run_allVMD.py                 # self test on reference/
     python run_allVMD.py --root ../sandbox
 
-Ohne --root laeuft das Skript auf dem mitgelieferten Referenzdatensatz. Das ist
-der Selbsttest: er schreibt nach images_check/ und summary_check.csv, damit die
-committeten Referenzbilder unangetastet bleiben, und man vergleicht danach die
-eigenen Zahlen mit denen in reference/.
+Without --root the script runs on the reference dataset that ships with the
+repository. That is the self test: it writes to images_check/ and
+summary_check.csv so that the committed reference images stay untouched, and
+afterwards you compare your own numbers with those in reference/.
 
-Durchsucht einen Verzeichnisbaum und macht fuer jeden Molekuelordner alles in
-einem Rutsch: pointval -> Cube, esp.tcl schreiben, die drei Ansichten mit
-Tachyon rendern, Farbskala und settings.txt dazu. Am Ende steht eine
-summary.csv mit den Kennzahlen und den Renderparametern.
+It walks a directory tree and does everything for each molecule folder in one
+go: pointval -> cube, write esp.tcl, render the three views with Tachyon, plus
+the colour bar and settings.txt. At the end there is a summary.csv with the
+statistics and the render parameters.
 
-Ein Molekuelordner ist jedes Verzeichnis mit
+A molecule folder is any directory holding
 
-    td.xyz  + tp.xyz     (Turbomole-Ausgabe, wird konvertiert)
-oder td.cube + tp.cube   (schon konvertiert)
+    td.xyz  + tp.xyz     (Turbomole output, gets converted)
+or  td.cube + tp.cube    (already converted)
 
-plus einer Strukturdatei (.mol, .sdf oder .xyz).
+plus a structure file (.mol, .sdf or .xyz).
 
-Ablauf: erst analysieren, dann EINMAL rendern
---------------------------------------------
-V_S,min und V_S,max stehen in den Cube-Dateien, dafuer muss nichts gerendert
-werden. Das Skript sammelt also zuerst die Kennzahlen aller Molekuele und
-rendert danach genau einen Durchgang.
+Order of work: analyse first, then render ONCE
+----------------------------------------------
+V_S,min and V_S,max are in the cube files, nothing has to be rendered for
+them. So the script first collects the statistics of all molecules and then
+renders exactly one pass.
 
-    --esp-range auto     jedes Molekuel auf seiner eigenen Skala (Standard)
-    --esp-range 0.035    fester Wert
-    --esp-range common   gemeinsame Skala, sofort aus diesem Lauf
+    --esp-range auto     every molecule on its own scale (default)
+    --esp-range 0.035    a fixed value
+    --esp-range common   a common scale, straight from this run
 
-Vergleichbar sind die Bilder nur mit EINER Skala fuer alle. Dafuer rendert die
-PyMOL-Pipeline zweimal (--two-pass) - hier nicht: am Ende jedes Laufs steht der
-kleinste Wert, der alle Molekuele abdeckt, samt fertiger Befehlszeile in der
-Konsole. Man liest ihn, entscheidet selbst, welche Skala das Bild zeigen soll,
-und startet den Lauf, der zaehlt. Ein Bild kostet in VMD ein bis zwei Minuten;
-ein automatischer erster Satz waere Ausschuss.
+The images are comparable only with ONE scale for all of them. The PyMOL
+pipeline renders twice for that (--two-pass) - not here: at the end of every
+run the console shows the smallest value that covers all molecules, together
+with a ready-made command line. You read it, decide for yourself which scale
+the figure should show, and start the run that counts. One image costs one to
+two minutes in VMD; an automatic first set would be waste.
 
-Fuer den direkten Vergleich mit der PyMOL-Pipeline den Wert aus deren
-summary.csv uebernehmen.
+For a direct comparison with the PyMOL pipeline, take the value from its
+summary.csv.
 
-Nicht enthalten
----------------
-Kein sigma-Loch, keine trilineare Interpolation entlang der C-X-Achse - das
-steht im Schwesterprojekt und wird hier nicht ein zweites Mal implementiert.
-V_S,min und V_S,max dagegen schon, und zwar aus denselben Gitterpunkten im Band
-rho = iso +/- 12 % wie drueben: derselbe Rechenweg, dieselben Zahlen. Zitieren
-muss man die PyMOL-Werte nur fuers sigma-Loch.
+Not included
+------------
+No sigma hole, no trilinear interpolation along the C-X axis - that lives in
+the sister project and is not implemented a second time here. V_S,min and
+V_S,max are, though, and from the same grid points in the band
+rho = iso +/- 12 % as over there: the same calculation, the same numbers. The
+PyMOL values have to be quoted only for the sigma hole.
 """
 
 from __future__ import annotations
@@ -70,20 +70,21 @@ from constants import HARTREE_TO_KJ       # noqa: E402
 
 STRUCT_EXT = (".mol", ".sdf", ".xyz")
 GRID_NAMES = ("td", "tp")
-# reference/ liegt neben scripts/, nicht im aktuellen Arbeitsverzeichnis.
-# Ohne --root ist der Lauf damit der Selbsttest, egal von wo aufgerufen.
+# reference/ sits next to scripts/, not in the current working directory.
+# Without --root the run is therefore the self test, no matter where it was
+# called from.
 DEFAULT_ROOT = os.path.normpath(os.path.join(_HERE, "..", "reference"))
 
 
 # ----------------------------------------------------------------------------
-# Molekuelordner finden
+# Finding molecule folders
 # ----------------------------------------------------------------------------
 
 def find_structure(folder, exclude):
-    """Erste Strukturdatei im Ordner, die keine Gitterdatei ist."""
+    """The first structure file in the folder that is not a grid file."""
     excl = {os.path.abspath(p) for p in exclude if p}
-    # .mol/.sdf vor .xyz: sie tragen Bindungsinformation, und ein nacktes .xyz
-    # kollidiert leicht mit den Turbomole-Gitterdateien derselben Endung.
+    # .mol/.sdf before .xyz: they carry bond information, and a bare .xyz
+    # easily collides with the Turbomole grid files of the same extension.
     for ext in STRUCT_EXT:
         for name in sorted(os.listdir(folder)):
             if not name.lower().endswith(ext):
@@ -92,13 +93,13 @@ def find_structure(folder, exclude):
             if os.path.abspath(path) in excl:
                 continue
             if os.path.splitext(name)[0] in GRID_NAMES:
-                continue                   # td.xyz / tp.xyz sind Daten
+                continue                   # td.xyz / tp.xyz are data
             return path
     return None
 
 
 def discover(root):
-    """Alle Molekuelordner unterhalb von ``root``, nach Namen sortiert."""
+    """All molecule folders below ``root``, sorted by name."""
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames
@@ -113,8 +114,8 @@ def discover(root):
                                 exclude=[os.path.join(dirpath, "td.xyz"),
                                          os.path.join(dirpath, "tp.xyz")])
         if struct is None and not has_cubes:
-            print(f"  ! {dirpath}: Gitter gefunden, aber keine Strukturdatei "
-                  f"({'/'.join(STRUCT_EXT)}) - uebersprungen")
+            print(f"  ! {dirpath}: grids found, but no structure file "
+                  f"({'/'.join(STRUCT_EXT)}) - skipped")
             continue
         found.append({"dir": dirpath, "struct": struct,
                       "has_raw": has_raw, "has_cubes": has_cubes})
@@ -122,7 +123,7 @@ def discover(root):
 
 
 def cube_dims(path):
-    """Gitterabmessungen aus dem Cube-Kopf, ohne die Daten zu lesen."""
+    """Grid dimensions from the cube header, without reading the data."""
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for _ in range(3):
             fh.readline()
@@ -130,18 +131,19 @@ def cube_dims(path):
 
 
 # ----------------------------------------------------------------------------
-# Schritt 1: Cubes und Kennzahlen
+# Step 1: cubes and statistics
 # ----------------------------------------------------------------------------
 
 def ensure_cubes(entry, args):
-    """Cubes bereitstellen und (V_S,min, V_S,max, Skala, Punkte) zurueckgeben.
+    """Provide the cubes and return (V_S,min, V_S,max, scale, points).
 
-    Drei Wege, in dieser Reihenfolge:
-      1. Cubes fehlen oder --force-convert: aus den pointval-Gittern erzeugen,
-         dabei fallen die Kennzahlen ohnehin an.
-      2. Cubes da und tragen die Kennzahlen im Kopf: direkt uebernehmen.
-      3. Cubes da, aber ohne Kennzahlen (aeltere Laeufe): Cubes lesen und
-         nachrechnen - rund 15 s statt Minuten fuer eine Neukonvertierung.
+    Three routes, in this order:
+      1. Cubes missing or --force-convert: build them from the pointval grids,
+         which produces the statistics along the way anyway.
+      2. Cubes present and carrying the statistics in the header: take them
+         over directly.
+      3. Cubes present but without statistics (older runs): read the cubes and
+         recompute - about 15 s instead of minutes for a reconversion.
     """
     folder = entry["dir"]
     cubes = {t: os.path.join(folder, f"{t}.cube") for t in GRID_NAMES}
@@ -150,29 +152,29 @@ def ensure_cubes(entry, args):
     if have and not args.force_convert:
         stats = conv.read_stats(cubes["tp"])
         if stats:
-            print("    Cubes vorhanden, Kennzahlen aus dem Cube-Kopf")
+            print("    cubes present, statistics from the cube header")
             return cubes, stats
-        print("    Cubes vorhanden, aber ohne Kennzahlen - werden nachgerechnet")
+        print("    cubes present but without statistics - recomputing them")
         density = conv.read_cube(cubes["td"])
         esp = conv.read_cube(cubes["tp"])
         return cubes, conv.shell_range(density, esp, args.iso)
 
     if entry["struct"] is None:
-        raise SystemExit(f"{folder}: Strukturdatei fehlt, ohne sie laesst sich "
-                         f"kein Cube-Header schreiben.")
+        raise SystemExit(f"{folder}: the structure file is missing, without "
+                         f"it no cube header can be written.")
     atoms = conv.read_structure(entry["struct"], unit=args.struct_unit)
     grids = {}
     for tag in GRID_NAMES:
         raw = os.path.join(folder, f"{tag}.xyz")
         if not os.path.exists(raw):
-            raise SystemExit(f"{folder}: weder {tag}.cube noch {tag}.xyz")
-        print(f"    konvertiere {tag}.xyz -> {tag}.cube (stride {args.stride})")
+            raise SystemExit(f"{folder}: neither {tag}.cube nor {tag}.xyz")
+        print(f"    converting {tag}.xyz -> {tag}.cube (stride {args.stride})")
         grids[tag] = conv.read_values(raw, verbose=False)
 
     stats = conv.shell_range(grids["td"][1], grids["tp"][1], args.iso)
     for tag in GRID_NAMES:
         info, data = grids[tag]
-        comment = f"{info['quantity'] or tag} - aus {tag}.xyz"
+        comment = f"{info['quantity'] or tag} - from {tag}.xyz"
         if tag == "tp" and stats:
             comment += conv.stats_comment(stats, args.iso)
         conv.write_cube(cubes[tag], info, data, atoms, args.stride, comment)
@@ -215,30 +217,30 @@ def write_summary(path, rows, common=None, advice=None):
                 "renderer": r.get("renderer", ""),
                 "ambient_occlusion": "on" if r["ao"] else "off",
                 "backgrounds": " ".join(r["backgrounds"]),
-                # Pro Ansicht, womit sie tatsaechlich entstanden ist - bei
-                # einem Tachyon-Absturz greift der Fallback, und das darf im
-                # Protokoll nicht verschwinden.
+                # Per view, what it was actually produced with - on a Tachyon
+                # crash the fallback kicks in, and that must not disappear
+                # from the record.
                 "views": ";".join(f"{v}:{r['made'][v]}" for v in rend.VIEWS
                                   if v in r.get("made", {})),
             })
         if common is not None:
-            fh.write(f"# gemeinsame Farbskala fuer alle Molekuele: "
+            fh.write(f"# common colour scale for all molecules: "
                      f"+/- {common:.4f} a.u.\n")
         if advice is not None:
-            # Auch in der Datei, nicht nur in der Konsole: wer die CSV spaeter
-            # wieder aufmacht, sieht sonst nicht, dass die Bilder auf
-            # verschiedenen Skalen liegen und was ein gemeinsamer Satz kostet.
-            fh.write(f"# jedes Molekuel auf seiner eigenen Skala; ein "
-                     f"vergleichbarer Satz braucht --esp-range "
+            # In the file as well, not only in the console: whoever opens the
+            # CSV later would otherwise not see that the images sit on
+            # different scales, nor what a comparable set would cost.
+            fh.write(f"# each molecule on its own scale; a comparable set "
+                     f"needs --esp-range "
                      f"{advice:.4f}\n")
 
 
 # ----------------------------------------------------------------------------
-# Empfehlung fuer den naechsten Lauf
+# Recommendation for the next run
 # ----------------------------------------------------------------------------
 
 def again_with(raw_argv, value):
-    """Derselbe Aufruf noch einmal, nur mit festem --esp-range."""
+    """The same call once more, only with a fixed --esp-range."""
     keep, skip = [], False
     for a in raw_argv:
         if skip:
@@ -250,8 +252,8 @@ def again_with(raw_argv, value):
         if a.startswith("--esp-range="):
             continue
         if a == "--no-render":
-            # Der Vorschlag zielt auf einen Bildersatz - ihn mit --no-render
-            # anzubieten waere die eine Zeile, die garantiert nichts rendert.
+            # The suggestion aims at an image set - offering it with
+            # --no-render would be the one line guaranteed to render nothing.
             continue
         keep.append(f'"{a}"' if " " in a else a)
     return " ".join(["python run_allVMD.py"] + keep
@@ -259,14 +261,14 @@ def again_with(raw_argv, value):
 
 
 def advise(mode, common, needed, rows, raw_argv):
-    """Sagen, welche Skala einen vergleichbaren Satz ergaebe - und wie man sie setzt.
+    """Say which scale would give a comparable set - and how to set it.
 
-    Statt eines zweiten Renderdurchgangs (so macht es die PyMOL-Pipeline mit
-    --two-pass) steht hier nur der Vorschlag. Welche Skala vernuenftig ist,
-    haengt davon ab, was das Bild zeigen soll: die kleinste, die nichts
-    abschneidet, ist selten die aussagekraeftigste - ein Molekuel mit einem
-    sehr negativen Sauerstoff drueckt sonst allen anderen die Kontraste flach.
-    Diese Entscheidung gehoert dem Anwender, nicht dem Skript.
+    Instead of a second render pass (which is how the PyMOL pipeline does it,
+    with --two-pass) there is only the suggestion here. Which scale is
+    sensible depends on what the figure is meant to show: the smallest one
+    that clips nothing is rarely the most informative - one molecule with a
+    very negative oxygen otherwise flattens the contrast of all the others.
+    That decision belongs to the user, not to the script.
     """
     if needed is None:
         return
@@ -275,133 +277,133 @@ def advise(mode, common, needed, rows, raw_argv):
     print("-" * 70)
     if mode == "auto":
         if len(used) == 1:
-            print(f"Alle Molekuele sind ohnehin auf +/- {used[0]:.4f} a.u. "
-                  f"gelandet -")
-            print("die Bilder sind also schon vergleichbar. Zum Festschreiben:")
+            print(f"All molecules ended up on +/- {used[0]:.4f} a.u. "
+                  f"anyway -")
+            print("so the images are already comparable. To fix it in place:")
         else:
-            print("Jedes Molekuel hat seine eigene Skala - "
+            print("Every molecule has its own scale - "
                   f"{', '.join(f'{v:.4f}' for v in used)} a.u.")
-            print("Nebeneinanderlegen darf man die Bilder so NICHT.")
-            print(f"Kleinster Wert, der alle abdeckt: +/- {needed:.4f} a.u.")
-            print("Zum Rendern eines vergleichbaren Satzes:")
+            print("The images may NOT be laid side by side like this.")
+            print(f"Smallest value that covers all of them: +/- {needed:.4f} a.u.")
+            print("To render a comparable set:")
         print()
         print(f"    {again_with(raw_argv, needed)}")
     elif common is not None and common + 1e-12 < needed:
         low = [r["prefix"] for r in rows
                if r["stats"] and r["stats"][2] > common + 1e-12]
-        print(f"! Die feste Skala +/- {common:.4f} a.u. schneidet ab.")
-        print(f"  {', '.join(low)} braucht bis +/- {needed:.4f} a.u.; "
-              f"alles darueber")
-        print("  laeuft in die Saettigung und ist im Bild nicht mehr "
-              "unterscheidbar.")
-        print("  Absichtlich? Dann ist alles gut. Sonst:")
+        print(f"! The fixed scale +/- {common:.4f} a.u. clips.")
+        print(f"  {', '.join(low)} needs up to +/- {needed:.4f} a.u.; "
+              f"everything above")
+        print("  runs into saturation and can no longer be told apart in the "
+              "image.")
+        print("  On purpose? Then all is well. Otherwise:")
         print()
         print(f"    {again_with(raw_argv, needed)}")
     else:
-        print(f"Skala +/- {common:.4f} a.u. deckt alle Molekuele ab "
-              f"(noetig waeren +/- {needed:.4f}).")
+        print(f"Scale +/- {common:.4f} a.u. covers all molecules "
+              f"(+/- {needed:.4f} would be needed).")
     print("-" * 70)
 
 
 # ----------------------------------------------------------------------------
-# Hauptprogramm
+# Main program
 # ----------------------------------------------------------------------------
 
 def main(argv=None):
     p = argparse.ArgumentParser(
-        description="Stapelkonvertierung und -rendering der VMD-ESP-Pipeline.")
+        description="Batch conversion and rendering of the VMD ESP pipeline.")
     p.add_argument("--root", default=DEFAULT_ROOT,
-                   help="Verzeichnisbaum mit den Molekuelordnern "
-                        "(Standard: reference/ des Repositoriums - der "
-                        "Selbsttest)")
+                   help="directory tree holding the molecule folders "
+                        "(default: the repository's reference/ - the self "
+                        "test)")
     p.add_argument("--only", nargs="+", metavar="NAME",
-                   help="nur diese Ordner, Platzhalter erlaubt: "
+                   help="these folders only, wildcards allowed: "
                         "--only paracetamol '*benzol'")
 
-    g = p.add_argument_group("Konvertierung")
+    g = p.add_argument_group("Conversion")
     g.add_argument("--stride", type=int, default=1,
-                   help="jeden n-ten Gitterpunkt (2 => 8x kleinere Cubes). "
-                        "Wirkt nur beim Erzeugen, nicht auf vorhandene Cubes.")
+                   help="every n-th grid point (2 => 8x smaller cubes). "
+                        "Applies only when building, not to existing cubes.")
     g.add_argument("--struct-unit", choices=["angstrom", "bohr"],
                    default="angstrom")
     g.add_argument("--force-convert", action="store_true",
-                   help="Cubes neu schreiben, auch wenn sie schon da sind")
+                   help="write the cubes again, even if they already exist")
 
-    g = p.add_argument_group("Szene")
+    g = p.add_argument_group("Scene")
     g.add_argument("--esp-range", default="auto",
-                   help="'auto' (Standard, jedes Molekuel auf seiner eigenen "
-                        "Skala), ein fester Wert in a.u. - am Ende jedes Laufs "
-                        "steht ein Vorschlag dafuer in der Konsole - oder "
-                        "'common' (gemeinsame Skala, sofort aus diesem Lauf)")
-    g.add_argument("--iso", type=float, default=0.001, help="Isowert in a.u.")
+                   help="'auto' (default, every molecule on its own scale), "
+                        "a fixed value in a.u. - the console prints a "
+                        "suggestion for it at the end of every run - or "
+                        "'common' (a common scale, straight from this run)")
+    g.add_argument("--iso", type=float, default=0.001, help="isovalue in a.u.")
     g.add_argument("--opacity", type=float, default=0.50,
-                   help="Deckkraft der Isoflaeche 0..1")
-    g.add_argument("--scale", default="auto", help="Zoom, Zahl oder 'auto'")
+                   help="opacity of the isosurface, 0..1")
+    g.add_argument("--scale", default="auto", help="zoom, a number or 'auto'")
     g.add_argument("--fill", type=float, default=0.85,
-                   help="Anteil der Bildhoehe fuer das Molekuel bei --scale auto")
+                   help="fraction of the image height for the molecule with --scale auto")
     g.add_argument("--rainbow", action="store_true",
-                   help="Regenbogenrampe statt rot-weiss-blau. Schreibt "
-                        "esp_rainbow.tcl und einen eigenen Bildersatz "
-                        "<molekuel>_rainbow_*, der Standardsatz bleibt "
-                        "erhalten.")
+                   help="rainbow ramp instead of red-white-blue. Writes "
+                        "esp_rainbow.tcl and an image set of its own, "
+                        "<molecule>_rainbow_*; the standard set is kept.")
 
-    g = p.add_argument_group("Rendern")
+    g = p.add_argument_group("Rendering")
     g.add_argument("--no-render", action="store_true",
-                   help="nur konvertieren und esp.tcl schreiben")
-    g.add_argument("--vmd", help="Pfad zu vmd.exe, falls nicht im PATH")
-    g.add_argument("--res", default="1600x1280", help="Bildgroesse")
+                   help="only convert and write esp.tcl")
+    g.add_argument("--vmd", help="path to vmd.exe, if it is not on the PATH")
+    g.add_argument("--res", default="1600x1280", help="image size")
     g.add_argument("--ao", action="store_true",
-                   help="Umgebungsverdeckung an. Standard aus: sie legt weiche "
-                        "Schatten in die Vertiefungen, saeumt dabei aber auch "
-                        "die Staebchen als graue Doppelgaenger auf der "
-                        "Isoflaeche. PyMOL rendert ebenfalls ohne.")
+                   help="ambient occlusion on. Off by default: it lays soft "
+                        "shadows into the hollows, but also lines the sticks "
+                        "as grey doubles on the isosurface. PyMOL renders "
+                        "without it too.")
     g.add_argument("--backgrounds", nargs="+", default=["white"],
-                   metavar="FARBE",
-                   help="Hintergrundfarben, z.B. white black. Ab zwei Farben "
-                        "bekommen die Dateien einen Zusatz: "
-                        "<molekuel>_pi_black.png")
+                   metavar="COLOUR",
+                   help="background colours, e.g. white black. From two "
+                        "colours on, the files get a suffix: "
+                        "<molecule>_pi_black.png")
     g.add_argument("--keep-tga", action="store_true")
-    g.add_argument("--dpi", type=int, default=300, help="Aufloesung der Skala")
+    g.add_argument("--dpi", type=int, default=300, help="resolution of the bar")
     g.add_argument("--images-dir", default=None,
-                   help="Zielordner in jedem Molekuelordner (Standard: "
-                        "'images', beim Selbsttest 'images_check')")
+                   help="target folder inside each molecule folder (default: "
+                        "'images', 'images_check' in the self test)")
     g.add_argument("--summary", default=None,
-                   help="Pfad der CSV (Standard: <root>/summary.csv)")
+                   help="path of the CSV (default: <root>/summary.csv)")
     args = p.parse_args(argv)
-    # Fuer die Empfehlung am Ende: derselbe Aufruf, nur mit anderer Skala.
+    # For the recommendation at the end: the same call, only with a different
+    # scale.
     raw_argv = list(sys.argv[1:]) if argv is None else list(argv)
 
-    # Der Selbsttest darf nichts Committetes ueberschreiben: eigene Bildordner,
-    # eigene Szenendatei, eigene CSV. Sonst laesst sich hinterher nicht mehr
-    # sagen, ob die Referenz noch die Referenz ist.
+    # The self test must not overwrite anything committed: its own image
+    # folder, its own scene file, its own CSV. Otherwise there is no way to
+    # tell afterwards whether the reference is still the reference.
     is_reference = os.path.abspath(args.root) == os.path.abspath(DEFAULT_ROOT)
-    # Eigener Szenenname pro Rampe, sonst ueberschreibt ein Regenbogenlauf die
-    # Szene des rot-weiss-blauen Laufs - die Bilder liegen aus demselben Grund
-    # getrennt (<molekuel>_rainbow_*).
+    # Its own scene name per ramp, otherwise a rainbow run overwrites the
+    # scene of the red-white-blue run - the images are kept apart for the same
+    # reason (<molecule>_rainbow_*).
     scene_name = ("esp_check" if is_reference else "esp") \
         + ("_rainbow" if args.rainbow else "") + ".tcl"
     if args.images_dir is None:
         args.images_dir = "images_check" if is_reference else "images"
-    # Nur fuer die Zusammenfassung - die Rampe selbst ist fest, siehe
-    # COLOR_SCALE in xyzToCubeToVMDVis.py.
+    # For the summary only - the ramp itself is fixed, see COLOR_SCALE in
+    # xyzToCubeToVMDVis.py.
     color_scale = conv.COLOR_SCALE["rainbow" if args.rainbow else "redblue"]
 
-    # Vor dem ersten chdir absolut machen: das Rendern laeuft im Molekuelordner,
-    # ein relativer Pfad zeigte dort woandershin.
+    # Make it absolute before the first chdir: rendering runs inside the
+    # molecule folder, where a relative path would point somewhere else.
     if args.vmd:
         args.vmd = os.path.abspath(args.vmd)
     args.root = os.path.abspath(args.root)
 
     print("=" * 70)
-    print("run_allVMD.py - Stapellauf der VMD-ESP-Pipeline")
+    print("run_allVMD.py - batch run of the VMD ESP pipeline")
     print("=" * 70)
     if is_reference:
-        print("  Referenzdatensatz (Selbsttest).")
-        print(f"  Schreibt nach '{args.images_dir}/', {scene_name} und "
+        print("  Reference dataset (self test).")
+        print(f"  Writes to '{args.images_dir}/', {scene_name} and "
               f"summary_check.csv,")
-        print("  damit die committeten Referenzdateien unberuehrt bleiben.")
-        print("  Danach die eigenen Zahlen mit reference/summary.csv und die")
-        print("  Bilder mit reference/*/images/ vergleichen.")
+        print("  so that the committed reference files stay untouched.")
+        print("  Afterwards compare your numbers with reference/summary.csv")
+        print("  and your images with reference/*/images/.")
 
     entries = discover(args.root)
     if args.only:
@@ -409,19 +411,19 @@ def main(argv=None):
                 if any(fnmatch.fnmatch(os.path.basename(e["dir"]).lower(),
                                        pat.lower()) for pat in args.only)]
         if len(entries) - len(keep):
-            print(f"  --only: {len(entries) - len(keep)} Ordner uebersprungen")
+            print(f"  --only: {len(entries) - len(keep)} folder(s) skipped")
         entries = keep
     if not entries:
-        raise SystemExit(f"Keine Molekuelordner unter '{args.root}' gefunden"
-                         + (" (mit --only)." if args.only else "."))
-    print(f"{len(entries)} Molekuelordner:")
+        raise SystemExit(f"No molecule folders found under '{args.root}'"
+                         + (" (with --only)." if args.only else "."))
+    print(f"{len(entries)} molecule folder(s):")
     for e in entries:
-        s = os.path.basename(e["struct"]) if e["struct"] else "nur Cubes"
+        s = os.path.basename(e["struct"]) if e["struct"] else "cubes only"
         print(f"  - {e['dir']}  ({s})")
 
-    # --- Schritt 1: Cubes und Kennzahlen ------------------------------------
+    # --- Step 1: cubes and statistics ---------------------------------------
     print("\n" + "-" * 70)
-    print("Schritt 1: Cubes und Kennzahlen")
+    print("Step 1: cubes and statistics")
     print("-" * 70)
     for e in entries:
         print(f"\n[{os.path.basename(os.path.normpath(e['dir']))}]")
@@ -430,40 +432,40 @@ def main(argv=None):
         if e["stats"]:
             v0, v1, amp, n = e["stats"]
             print(f"    V_S,min = {v0:+.5f}   V_S,max = {v1:+.5f} a.u.  "
-                  f"({n} Punkte)  -> +/- {amp:.4f}")
+                  f"({n} points)  -> +/- {amp:.4f}")
         else:
-            print("    ! keine Schale gefunden - Kennzahlen fehlen")
+            print("    ! no shell found - statistics missing")
 
-    # --- Farbskala festlegen ------------------------------------------------
-    # needed = die Skala, die ALLE Molekuele dieses Laufs abdeckt. Sie wird
-    # immer berechnet, auch im Modus auto: aus ihr entsteht die Empfehlung am
-    # Ende. Deshalb braucht dieses Skript keinen zweiten Renderdurchgang -
-    # der Vorschlag steht in der Konsole, der Anwender entscheidet, und der
-    # naechste Aufruf mit --esp-range <wert> ist der Durchgang, der zaehlt.
+    # --- Fix the colour scale -----------------------------------------------
+    # needed = the scale that covers ALL molecules of this run. It is always
+    # computed, in auto mode too: the recommendation at the end comes out of
+    # it. That is why this script needs no second render pass - the suggestion
+    # is in the console, the user decides, and the next call with
+    # --esp-range <value> is the pass that counts.
     ranges = [e["stats"][2] for e in entries if e["stats"]]
     needed = max(ranges) if ranges else None
     common = needed
     mode = str(args.esp_range).lower()
     if mode == "auto":
-        print("\nFarbskala je Molekuel aus den eigenen Kennzahlen (auto)")
+        print("\nColour scale per molecule from its own statistics (auto)")
     elif mode == "common":
         if common is None:
-            raise SystemExit("Keine Kennzahlen - --esp-range braucht einen "
-                             "festen Wert.")
-        print(f"\nGemeinsame Farbskala: +/- {common:.4f} a.u. "
-              f"(groesster Wert von {len(ranges)} Molekuel(en))")
+            raise SystemExit("No statistics - --esp-range needs a fixed "
+                             "value.")
+        print(f"\nCommon colour scale: +/- {common:.4f} a.u. "
+              f"(largest value of {len(ranges)} molecule(s))")
     else:
         try:
             common = float(args.esp_range)
         except ValueError:
-            raise SystemExit(f"--esp-range: 'auto', 'common' oder eine Zahl, "
-                             f"nicht '{args.esp_range}'.")
-        print(f"\nFeste Farbskala: +/- {common:.4f} a.u.")
+            raise SystemExit(f"--esp-range: 'auto', 'common' or a number, "
+                             f"not '{args.esp_range}'.")
+        print(f"\nFixed colour scale: +/- {common:.4f} a.u.")
 
-    # --- Schritt 2: Szene und Bilder ---------------------------------------
+    # --- Step 2: scene and images -------------------------------------------
     print("\n" + "-" * 70)
-    print(f"Schritt 2: {scene_name} schreiben" +
-          ("" if args.no_render else " und rendern"))
+    print(f"Step 2: write {scene_name}" +
+          ("" if args.no_render else " and render"))
     print("-" * 70)
 
     rows = []
@@ -487,7 +489,7 @@ def main(argv=None):
             fill=args.fill, rainbow=args.rainbow,
             sources=", ".join(os.path.basename(c)
                               for c in e["cubes"].values()))
-        print(f"    -> {tcl}   (Farbskala +/- {rng:.4f} a.u.)")
+        print(f"    -> {tcl}   (colour scale +/- {rng:.4f} a.u.)")
 
         row = {"prefix": name, "struct": e["struct"], "grid": e["grid"],
                "stats": e["stats"], "rng": rng, "iso": args.iso, "mode": mode,
@@ -496,8 +498,8 @@ def main(argv=None):
                "made": {}, "size": None, "renderer": ""}
 
         if not args.no_render:
-            # render_espVMD arbeitet im aktuellen Verzeichnis - esp.tcl, die
-            # Cubes und images/ liegen dort alle nebeneinander.
+            # render_espVMD works in the current directory - esp.tcl, the
+            # cubes and images/ all sit next to each other there.
             cwd = os.getcwd()
             try:
                 os.chdir(e["dir"])
@@ -519,10 +521,10 @@ def main(argv=None):
                   common=None if mode == "auto" else common,
                   advice=needed if mode == "auto" else None)
 
-    # --- Abschluss ----------------------------------------------------------
+    # --- Wrap-up ------------------------------------------------------------
     print("\n" + "-" * 70)
-    print(f"{'Molekuel':<22}{'V_S,min':>10}{'V_S,max':>10}{'Skala':>9}"
-          f"  Ansichten")
+    print(f"{'Molecule':<22}{'V_S,min':>10}{'V_S,max':>10}{'Scale':>9}"
+          f"  Views")
     print("-" * 70)
     for r in rows:
         s = r["stats"]
@@ -532,10 +534,10 @@ def main(argv=None):
         print(f"{r['prefix']:<22}{v0}{v1}{r['rng']:>9.4f}  {views}")
     print("-" * 70)
     if mode != "auto" and common is not None:
-        print(f"Gemeinsame Skala: +/- {common:.4f} a.u.")
+        print(f"Common scale: +/- {common:.4f} a.u.")
     print(f"CSV: {summary}")
     if is_reference:
-        print("Vergleiche jetzt mit reference/summary.csv und "
+        print("Now compare with reference/summary.csv and "
               "reference/*/images/.")
     advise(mode, common, needed, rows, raw_argv)
     return 0

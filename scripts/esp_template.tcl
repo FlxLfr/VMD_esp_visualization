@@ -1,43 +1,42 @@
 # ==============================================================
-# esp.tcl - ESP auf der Elektronendichte-Isoflaeche
-# Erzeugt von xyzToCubeToVMDVis.py (@@STAMP@@) aus @@SOURCES@@
+# esp.tcl - ESP on the electron density isosurface
+# Written by xyzToCubeToVMDVis.py (@@STAMP@@) from @@SOURCES@@
 #
-# Start:  vmd -e esp.tcl        oder in der Tk Console:  source esp.tcl
-# Befehle: esp_view pi|edge|sigma, esp_iso, esp_range, esp_opacity, esp_snapshot
+# Start:  vmd -e esp.tcl        or in the Tk Console:  source esp.tcl
+# Commands: esp_view pi|edge|sigma, esp_iso, esp_range, esp_opacity, esp_snapshot
 #
-# Eine Farbskala zeichnet diese Szene bewusst NICHT. VMD hat kein Legenden-
-# objekt; man muesste den Balken als Grafik in eine eigene Molekuel-ID legen und
-# von der Maus abkoppeln - das ist fummelig und sieht nie ganz richtig aus.
-# Fuer die Ausgabebilder macht render_espVMD.py die Skala mit matplotlib, als
-# eigenes PNG in images/. Genauso arbeitet die PyMOL-Pipeline.
+# This scene deliberately does NOT draw a colour bar. VMD has no legend object;
+# one would have to put the bar into a molecule ID of its own as graphics and
+# decouple it from the mouse - that is fiddly and never looks quite right.
+# For the output images render_espVMD.py makes the scale with matplotlib, as a
+# separate PNG in images/. The PyMOL pipeline works the same way.
 # ==============================================================
 
-# VMD-Versionen kennen unterschiedliche display-/material-Optionen. Ein
-# unbekannter Befehl wirft einen Fehler, und ein Fehler bricht "source" an Ort
-# und Stelle ab - alles danach fehlt dann kommentarlos. Optionales laeuft
-# deshalb ueber _try.
+# VMD versions know different display/material options. An unknown command
+# raises an error, and an error aborts "source" then and there - everything
+# after it is silently missing. Optional commands therefore go through _try.
 proc _try {args} {
     if {[catch {uplevel 1 $args} err]} {
-        puts "! uebersprungen: $args   ($err)"
+        puts "! skipped: $args   ($err)"
     }
 }
 
-# Farbskala mit beliebig vielen Stuetzfarben.
+# Colour scale with any number of anchor colours.
 #
-# "color scale method" kennt nur drei: kleinster Wert, Mitte, groesster. Die
-# Regenbogenrampe der PyMOL-Pipeline hat fuenf (rot, gelb, gruen, cyan, blau),
-# und mit dreien wird daraus rot-gruen-blau mit olivgruenen und petrolfarbenen
-# Zwischentoenen - eine andere Rampe, nicht dieselbe.
+# "color scale method" knows only three: lowest value, middle, highest. The
+# rainbow ramp of the PyMOL pipeline has five (red, yellow, green, cyan,
+# blue), and with three of them it turns into red-green-blue with olive and
+# teal in between - a different ramp, not the same one.
 #
-# VMDs Farbskala ist aber eine Tabelle aus 1024 Farben, deren IDs hinter den
-# benannten Farben liegen ([colorinfo num], normalerweise 33). Jede davon
-# laesst sich mit "color change rgb" einzeln setzen. Damit ist die Rampe frei
-# waehlbar und exakt dieselbe wie drueben.
+# VMD's colour scale, however, is a table of 1024 colours whose IDs sit behind
+# the named colours ([colorinfo num], normally 33). Each one can be set
+# individually with "color change rgb". That makes the ramp freely choosable
+# and exactly the same as over there.
 #
-# Wichtig: NACH "color scale method" aufrufen. Ein spaeteres method-Kommando
-# erzeugt die Tabelle neu und ueberschreibt alles hier Gesetzte.
+# Important: call this AFTER "color scale method". A later method command
+# rebuilds the table and overwrites everything set here.
 proc esp_ramp {stops} {
-    if {[llength $stops] < 2} { return }        ;# leer = VMDs eigene Rampe
+    if {[llength $stops] < 2} { return }        ;# empty = VMD's own ramp
     set base [colorinfo num]
     set n    1024
     set segs [expr {[llength $stops] - 1}]
@@ -57,31 +56,31 @@ proc esp_ramp {stops} {
     _try display update on
 }
 
-# --- 1) Daten -------------------------------------------------
-# Die Cube-Datei bringt die Atome selbst mit, in Bohr und aus derselben Quelle
-# wie das Gitter - eine separate Strukturdatei kann also nicht verrutschen.
+# --- 1) Data --------------------------------------------------
+# The cube file brings the atoms with it, in Bohr and from the same source as
+# the grid - so a separate structure file cannot slip out of register.
 mol delete all
 set espmol [mol new @@RHO_CUBE@@ type cube waitfor all]
 mol addfile @@ESP_CUBE@@ type cube waitfor all
 
-# Die zweite Cube-Datei haengt einen identischen Koordinatensatz als Frame an.
+# The second cube file appends an identical set of coordinates as a frame.
 if {[molinfo $espmol get numframes] > 1} {
     animate delete beg 1 end [expr {[molinfo $espmol get numframes] - 1}] $espmol
 }
 
-set VOL_RHO @@VOL_RHO@@ ;# Elektronendichte
-set VOL_ESP @@VOL_ESP@@ ;# elektrostatisches Potential
+set VOL_RHO @@VOL_RHO@@ ;# electron density
+set VOL_ESP @@VOL_ESP@@ ;# electrostatic potential
 set ISO     @@ISO@@
 set RANGE   @@RANGE@@
-set SCALE   @@SCALE@@   ;# Zahl oder "auto"
-set FILL    @@FILL@@    ;# Anteil der Fensterhoehe, den das Molekuel fuellen soll
+set SCALE   @@SCALE@@   ;# a number or "auto"
+set FILL    @@FILL@@    ;# fraction of the window height the molecule should fill
 
-# --- 2) Darstellungen -----------------------------------------
-# REIHENFOLGE IST NICHT KOSMETIK: VMD zeichnet Reps nach Nummer und schreibt
-# auch fuer transparente Flaechen in den Tiefenpuffer. Steht die Isoflaeche
-# zuerst, faellt das danach gezeichnete Geruest ueberall aus dem Tiefentest -
-# eine sichtbar durchscheinende Flaeche, hinter der nichts zu sehen ist.
-# Also: erst das opake Geruest, dann die transparente Flaeche.
+# --- 2) Representations ---------------------------------------
+# THE ORDER IS NOT COSMETIC: VMD draws reps by number and writes to the depth
+# buffer for transparent surfaces too. With the isosurface first, the skeleton
+# drawn afterwards fails the depth test everywhere - a visibly translucent
+# surface with nothing to be seen behind it.
+# So: the opaque skeleton first, then the transparent surface.
 mol delrep 0 $espmol
 set REP_MOL  0
 set REP_SURF 1
@@ -93,38 +92,38 @@ mol selection {all}
 mol material Opaque
 mol addrep $espmol
 
-# Isoflaeche rho = ISO, eingefaerbt nach dem ZWEITEN Volumendatensatz. Das ist
-# das VMD-Aequivalent zu ramp_new + set surface_color in PyMOL: VMD kennt kein
-# Rampenobjekt, sondern faerbt direkt nach den Werten eines anderen Gitters in
-# derselben Molekuel-ID.
-#   Isosurface <iso> <volID> <show 0=Flaeche> <draw 0=solide> <step> <size>
+# Isosurface rho = ISO, coloured by the SECOND volumetric dataset. This is the
+# VMD equivalent of ramp_new + set surface_color in PyMOL: VMD has no ramp
+# object, it colours directly by the values of another grid in the same
+# molecule ID.
+#   Isosurface <iso> <volID> <show 0=surface> <draw 0=solid> <step> <size>
 mol representation Isosurface $ISO $VOL_RHO 0 0 1 1
 mol color Volume $VOL_ESP
 mol selection {all}
 mol material Transparent
 mol addrep $espmol
 
-# @@RANGE_NEG@@ .. +@@RANGE@@ a.u. = @@KJ@@ kJ/(mol*e). RWB: rot negativ.
+# @@RANGE_NEG@@ .. +@@RANGE@@ a.u. = @@KJ@@ kJ/(mol*e). RWB: red negative.
 color scale method @@COLORSCALE@@
 color scale midpoint 0.5
 mol scaleminmax $espmol $REP_SURF @@RANGE_NEG@@ @@RANGE@@
 
-# Stuetzfarben der Rampe, aus der PyMOL-Pipeline uebernommen. Leer heisst:
-# VMDs eingebaute Skala @@COLORSCALE@@ bleibt, wie sie ist.
+# Anchor colours of the ramp, taken over from the PyMOL pipeline. Empty means:
+# VMD's built-in scale @@COLORSCALE@@ stays as it is.
 set RAMP_STOPS {@@RAMP_STOPS@@}
 esp_ramp $RAMP_STOPS
 
-# --- 3) Befehle -----------------------------------------------
+# --- 3) Commands ----------------------------------------------
 
-# Zoom aus der Molekuelgroesse statt aus einer geratenen Zahl.
+# Zoom from the size of the molecule instead of from a guessed number.
 #
-# Der sichtbare Weltausschnitt ist in der Hoehe rund "display height"/2 gross -
-# empirisch an einem echten Tachyon-Render nachgemessen, VMD gibt die Groesse
-# nirgends direkt aus. Damit das Molekuel FILL der Bildhoehe fuellt, muss also
-# gelten:  scale = FILL * (height/2) / (2*r).
+# The visible part of the world is about "display height"/2 tall - measured
+# empirically against a real Tachyon render, VMD does not report the size
+# anywhere directly. For the molecule to fill FILL of the image height it must
+# therefore hold that:  scale = FILL * (height/2) / (2*r).
 #
-# r ist der Radius der Huellkugel plus rund 1.8 A fuer die Isoflaeche - ueber
-# die Kugel, damit keine der drei Ansichten angeschnitten wird.
+# r is the radius of the bounding sphere plus about 1.8 A for the isosurface -
+# via the sphere, so that none of the three views is cut off.
 proc esp_fit {} {
     global espmol SCALE FILL
     if {$SCALE ne "auto"} { scale to $SCALE ; return }
@@ -135,9 +134,9 @@ proc esp_fit {} {
     set ey [expr {[lindex [lindex $mm 1] 1] - [lindex [lindex $mm 0] 1]}]
     set ez [expr {[lindex [lindex $mm 1] 2] - [lindex [lindex $mm 0] 2]}]
     set r  [expr {0.5 * sqrt($ex*$ex + $ey*$ey + $ez*$ez) + 1.8}]
-    # Notfallwert, falls diese VMD-Version die Hoehe nicht herausgibt: 6.0 ist
-    # der Default. Ohne die Absicherung reisst ein leerer Rueckgabewert die
-    # ganze Szene mit, weil esp_fit schon beim Start aufgerufen wird.
+    # Fallback in case this VMD version does not hand out the height: 6.0 is
+    # the default. Without that guard an empty return value takes the whole
+    # scene down with it, because esp_fit is already called at start-up.
     if {[catch {set h [display get height]}] || ![string is double -strict $h]
         || $h <= 0} {
         set h 6.0
@@ -145,8 +144,8 @@ proc esp_fit {} {
     scale to [expr {$FILL * 0.25 * $h / $r}]
 }
 
-# Auf die ATOME zentrieren, nicht auf die Gitterbox: resetview passt die Ansicht
-# an alle Reps an, und die Isoflaeche traegt die Ausdehnung des ganzen Gitters.
+# Centre on the ATOMS, not on the grid box: resetview fits the view to all
+# reps, and the isosurface carries the extent of the whole grid.
 proc esp_center {} {
     global espmol
     set sel [atomselect $espmol all]
@@ -159,19 +158,19 @@ proc esp_center {} {
     esp_fit
 }
 
-# Die drei Ansichten stehen als fertige Rotationsmatrizen hier drin.
-# xyzToCubeToVMDVis.py hat sie aus der Geometrie gerechnet: Ringnormale fuer
-# pi, die echte Kohlenstoff-Halogen-Achse fuer sigma - dieselbe Rechnung wie in
-# der PyMOL-Pipeline, damit beide Bildersaetze wirklich dasselbe zeigen.
+# The three views sit here as finished rotation matrices.
+# xyzToCubeToVMDVis.py computed them from the geometry: the ring normal for
+# pi, the true carbon-halogen axis for sigma - the same calculation as in the
+# PyMOL pipeline, so that both image sets really show the same thing.
 #
-# Frueher stand hier "pi, dann rotate x by -90". Das setzte voraus, dass das
-# Molekuel planar in der xy-Ebene liegt und die C-X-Achse nach -y zeigt. Fuer
-# die Halogenbenzole aus Turbomole stimmte das; fuer die substituierten
-# Pyridine nicht, dort blickte sigma am Loch vorbei. Gemerkt haette man es
-# fast nicht: in jeder Richtung sitzt eine runde eingefaerbte Flaeche, und die
-# Gegenseite sieht aus wie ein sigma-Loch.
+# This used to read "pi, then rotate x by -90". That assumed the molecule lies
+# planar in the xy plane with the C-X axis pointing along -y. For the
+# halobenzenes from Turbomole that held; for the substituted pyridines it did
+# not, and there sigma looked past the hole. It would have been almost
+# impossible to notice: in every direction there is a round coloured surface,
+# and the far side looks like a sigma hole.
 #
-# sigma-Achse dieses Molekuels: @@AXIS_LABEL@@
+# sigma axis of this molecule: @@AXIS_LABEL@@
 set ROT_PI    @@ROT_PI@@
 set ROT_EDGE  @@ROT_EDGE@@
 set ROT_SIGMA @@ROT_SIGMA@@
@@ -187,56 +186,56 @@ proc esp_view {which} {
     }
     molinfo $espmol set rotate_matrix [list $m]
     if {$which eq "sigma"} {
-        puts "Hinweis: in der Achsenansicht stapeln sich die"
-        puts "  transparenten Lagen - esp_opacity 1.0 oder"
-        puts "  esp_snapshot (Tachyon) gibt ein sauberes Bild."
+        puts "Note: in the axial view the transparent layers"
+        puts "  stack up - esp_opacity 1.0 or esp_snapshot"
+        puts "  (Tachyon) gives a clean image."
     }
-    puts "Ansicht: $which"
+    puts "View: $which"
 }
 
 proc esp_iso {value} {
     global espmol VOL_RHO REP_SURF ISO
     set ISO $value
     mol modstyle $REP_SURF $espmol Isosurface $value $VOL_RHO 0 0 1 1
-    puts "Isowert: rho = $value a.u."
+    puts "Isovalue: rho = $value a.u."
 }
 
 proc esp_range {half} {
     global espmol REP_SURF RANGE
     set RANGE $half
     mol scaleminmax $espmol $REP_SURF [expr {-1.0 * $half}] $half
-    puts "Farbskala: +/- $half a.u."
+    puts "Colour scale: +/- $half a.u."
 }
 
-# Der Blick geht durch ZWEI Lagen der geschlossenen Flaeche; bei Deckkraft a
-# bleibt (1-a)^2 uebrig. 0.5 ist der brauchbare Kompromiss, 1.0 zeigt nur die
-# Flaeche, unter 0.3 wird die Farbe zu blass.
+# The line of sight passes through TWO layers of the closed surface; at opacity
+# a, (1-a)^2 survives. 0.5 is the workable compromise, 1.0 shows only the
+# surface, below 0.3 the colour becomes too pale.
 proc esp_opacity {value} {
     _try material change opacity Transparent $value
-    puts "Deckkraft: $value"
+    puts "Opacity: $value"
 }
 
-# Strahlverfolgt. Schnelle Alternative: render snapshot $name.png
+# Ray traced. Fast alternative: render snapshot $name.png
 proc esp_snapshot {name} {
     render TachyonInternal $name.tga
-    puts "geschrieben: $name.tga"
+    puts "written: $name.tga"
 }
 
-# --- 4) Anzeige -----------------------------------------------
+# --- 4) Display -----------------------------------------------
 _try display projection Orthographic
 _try display depthcue off
 _try display shadows off
 _try display culling off
 _try axes location off
 _try color Display Background white
-# Ohne das schneidet die nahe Clipping-Ebene beim Zoomen eine Scheibe heraus.
+# Without this the near clipping plane cuts a slice out when zooming.
 _try display nearclip set 0.010000
-# Echte Transparenz statt Rasterpunkten ("screen door"); alte Treiber koennen
-# kein GLSL - dann bleibt das Raster, die Tachyon-Bilder sind trotzdem sauber.
+# True transparency instead of a dither pattern ("screen door"); old drivers
+# cannot do GLSL - then the pattern stays, the Tachyon images are clean anyway.
 _try display rendermode GLSL
 _try material change opacity  Transparent @@OPACITY@@
 _try material change diffuse  Transparent 0.750000
-# Glanzlicht klein halten - ein milchiger Schleier frisst den Durchblick auf.
+# Keep the specular highlight small - a milky veil eats up the view through.
 _try material change specular Transparent 0.100000
 _try material change shininess Transparent 0.300000
 
@@ -244,5 +243,5 @@ _try material change shininess Transparent 0.300000
 esp_view pi
 
 puts ""
-puts "esp.tcl geladen. rho = $ISO a.u., Farbskala +/- $RANGE a.u.@@STATS@@"
+puts "esp.tcl loaded. rho = $ISO a.u., colour scale +/- $RANGE a.u.@@STATS@@"
 puts ""

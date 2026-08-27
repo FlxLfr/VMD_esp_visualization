@@ -1,44 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-make_reference.py - kleinen Referenzdatensatz aus einem vollen Molekuelordner
+make_reference.py - a small reference dataset from a full molecule folder
 
     python tools/make_reference.py sandbox/brombenzol --name brombenzol
 
-Schreibt nach reference/<name>/ ein ausgeduenntes td.xyz / tp.xyz im
-Turbomole-pointval-Format plus die Strukturdatei. Das ist der Datensatz fuer
-den Selbsttest: `python run_allVMD.py` ohne Argumente laeuft darauf.
+Writes a decimated td.xyz / tp.xyz in Turbomole pointval format plus the
+structure file to reference/<name>/. That is the dataset for the self test:
+`python run_allVMD.py` without arguments runs on it.
 
-Warum pointval und nicht Cube
------------------------------
-Der Selbsttest soll die ganze Kette pruefen, also auch xyzToCubeToVMDVis.py -
-Einheitenumrechnung und Indexvertauschung sind die Stellen, an denen am ehesten
-etwas kaputtgeht. Faendet er fertige Cubes vor, wuerde er genau diesen Schritt
-ueberspringen.
+Why pointval and not cube
+-------------------------
+The self test is meant to check the whole chain, xyzToCubeToVMDVis.py
+included - unit conversion and index reordering are the places most likely to
+break. If it found ready-made cubes, it would skip exactly that step.
 
-Was ausgeduennt wird
---------------------
-Zwei Schritte, beide noetig:
+What is decimated
+-----------------
+Two steps, both necessary:
 
-  1. **Zuschneiden.** Das volle Gitter ist eine 30-Bohr-Box, das Molekuel und
-     seine rho=0.001-Flaeche fuellen davon nur die Mitte. Der Ausschnitt wird
-     aus der DICHTE bestimmt: Huellquader aller Punkte mit rho > iso/2, plus
-     Rand. Damit ist garantiert, dass die Isoflaeche vollstaendig enthalten ist
-     und die Bilder nicht angeschnitten aussehen.
-  2. **Ausduennen.** Nur jeder n-te Punkt je Achse.
+  1. **Cropping.** The full grid is a 30 Bohr box, and the molecule with its
+     rho = 0.001 surface fills only the middle of it. The crop is determined
+     from the DENSITY: the bounding box of all points with rho > iso/2, plus a
+     margin. That guarantees the isosurface is fully contained and the images
+     do not look cut off.
+  2. **Decimating.** Only every n-th point per axis.
 
-Beides zusammen bringt 1.25 GB auf wenige MB. Der Datensatz ist bewusst zu grob
-fuer einen zitierfaehigen V_S-Wert - er beantwortet die Frage "laeuft die
-Installation und kommen die dokumentierten Zahlen heraus", nicht "wie gross ist
-das sigma-Loch".
+Together the two bring 1.25 GB down to a few MB. The dataset is deliberately
+too coarse for a citable V_S value - it answers the question "does the
+installation run and do the documented numbers come out", not "how large is
+the sigma hole".
 
-Dieselben Parameter wie im Schwesterprojekt
--------------------------------------------
-Die PyMOL-Pipeline baut ihren Referenzsatz mit denselben Vorgaben (brombenzol,
---stride 5, --margin 2.5). Nur so stehen in beiden Repositorien Zahlen, die man
-nebeneinanderlegen darf: weicht die Gitteraufloesung ab, weichen V_S,min und
-V_S,max um ein bis drei Prozent ab, und der Vergleich misst dann die
-Ausduennung statt der Viewer.
+The same parameters as in the sister project
+--------------------------------------------
+The PyMOL pipeline builds its reference set with the same settings
+(brombenzol, --stride 5, --margin 2.5). Only that way do both repositories
+hold numbers that may be laid side by side: if the grid resolution differs,
+V_S,min and V_S,max differ by one to three per cent, and the comparison then
+measures the decimation instead of the viewers.
 """
 
 from __future__ import annotations
@@ -59,7 +58,7 @@ QUANTITY = {"td": "density", "tp": "electrostatic potential"}
 
 
 def read_cube(path):
-    """Gaussian-Cube -> (werte[i1,i2,i3], origin, delta) in Bohr."""
+    """Gaussian cube -> (values[i1,i2,i3], origin, delta) in Bohr."""
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         fh.readline()
         fh.readline()
@@ -69,32 +68,32 @@ def read_cube(path):
         for i in range(3):
             p = fh.readline().split()
             dims.append(int(p[0]))
-            delta.append(float(p[1 + i]))     # Diagonalelement
+            delta.append(float(p[1 + i]))     # diagonal element
         for _ in range(natoms):
             fh.readline()
-        # np.fromstring parst in C und legt kein Zwischenergebnis in Python an.
-        # Ein volles Gitter hat 15.8 Millionen Werte; ueber .split() waere das
-        # eine Liste aus 15.8 Millionen str-Objekten, gut ein Gigabyte nur fuer
-        # den Zwischenschritt.
+        # np.fromstring parses in C and builds no intermediate object in
+        # Python. A full grid has 15.8 million values; via .split() that would
+        # be a list of 15.8 million str objects, a good gigabyte for the
+        # intermediate step alone.
         values = np.fromstring(fh.read(), dtype=np.float32, sep=" ")
     if values.size != dims[0] * dims[1] * dims[2]:
-        raise ValueError(f"{path}: {values.size} Werte, erwartet "
+        raise ValueError(f"{path}: {values.size} values, expected "
                          f"{dims[0] * dims[1] * dims[2]}")
     return values.reshape(dims), np.array(origin), np.array(delta)
 
 
 def load(folder, tag, verbose=True):
-    """Cube bevorzugen (Sekunden), sonst die pointval-Datei (Minuten)."""
+    """Prefer the cube (seconds), otherwise the pointval file (minutes)."""
     cube = os.path.join(folder, f"{tag}.cube")
     if os.path.exists(cube):
         if verbose:
-            print(f"    lese {tag}.cube")
+            print(f"    reading {tag}.cube")
         return read_cube(cube)
     raw = os.path.join(folder, f"{tag}.xyz")
     if not os.path.exists(raw):
-        raise SystemExit(f"{folder}: weder {tag}.cube noch {tag}.xyz")
+        raise SystemExit(f"{folder}: neither {tag}.cube nor {tag}.xyz")
     if verbose:
-        print(f"    lese {tag}.xyz (pointval, das dauert)")
+        print(f"    reading {tag}.xyz (pointval, this takes a while)")
     import xyzToCubeToVMDVis as conv
     info, data = conv.read_values(raw, verbose=verbose)
     origin = np.array([info["grid"][i][0] for i in range(3)])
@@ -103,14 +102,14 @@ def load(folder, tag, verbose=True):
 
 
 def write_pointval(path, data, origin, delta, quantity, title="101"):
-    """Turbomole-pointval schreiben: x laeuft am schnellsten."""
+    """Write Turbomole pointval: x varies fastest."""
     n1, n2, n3 = data.shape
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
-        # #origin bleibt bei null, der Versatz steht in den #grid-Zeilen.
-        # Turbomole schreibt es genauso, und xyzToCubeToVMDVis.py addiert
-        # beide: stuende der Versatz an beiden Stellen, laege das Gitter
-        # doppelt so weit vom Ursprung weg wie die Atome - der klassische
-        # "Molekuel schwebt neben seiner Oberflaeche"-Fehler.
+        # #origin stays at zero, the offset sits in the #grid lines.
+        # Turbomole writes it the same way, and xyzToCubeToVMDVis.py adds both
+        # of them: were the offset in both places, the grid would sit twice as
+        # far from the origin as the atoms - the classic "molecule floats next
+        # to its surface" error.
         fh.write(f"#origin      {0.0:14.6f}{0.0:14.6f}{0.0:14.6f}\n")
         for i in range(3):
             v = [0.0, 0.0, 0.0]
@@ -128,8 +127,8 @@ def write_pointval(path, data, origin, delta, quantity, title="101"):
         ys = origin[1] + delta[1] * np.arange(n2)
         zs = origin[2] + delta[2] * np.arange(n3)
         buf = []
-        for k in range(n3):                      # z aussen ...
-            for j in range(n2):                  # ... x innen
+        for k in range(n3):                      # z outermost ...
+            for j in range(n2):                  # ... x innermost
                 col = data[:, j, k]
                 for i in range(n1):
                     buf.append(f"   {xs[i]:14.8f} {ys[j]:14.8f} {zs[k]:14.8f} "
@@ -142,17 +141,17 @@ def write_pointval(path, data, origin, delta, quantity, title="101"):
 
 def main(argv=None):
     p = argparse.ArgumentParser(
-        description="Ausgeduennten Referenzdatensatz fuer den Selbsttest bauen.")
-    p.add_argument("source", help="Molekuelordner mit td/tp und Struktur")
-    p.add_argument("--name", help="Name in reference/ (Standard: Ordnername)")
+        description="Build a decimated reference dataset for the self test.")
+    p.add_argument("source", help="molecule folder with td/tp and a structure file")
+    p.add_argument("--name", help="name under reference/ (default: folder name)")
     p.add_argument("--outdir", default=None,
-                   help="Standard: reference/ des Repositoriums")
+                   help="default: the repository's reference/")
     p.add_argument("--stride", type=int, default=5,
-                   help="jeder n-te Gitterpunkt je Achse (Standard 5)")
+                   help="every n-th grid point per axis (default 5)")
     p.add_argument("--margin", type=float, default=2.5,
-                   help="Rand um die Isoflaeche in Bohr (Standard 2.5)")
+                   help="margin around the isosurface in Bohr (default 2.5)")
     p.add_argument("--iso", type=float, default=0.001,
-                   help="Isowert, der vollstaendig enthalten sein muss")
+                   help="isovalue that must be fully contained")
     args = p.parse_args(argv)
 
     src = os.path.normpath(args.source)
@@ -169,14 +168,14 @@ def main(argv=None):
     dens, origin, delta = load(src, "td")
     esp, o2, d2 = load(src, "tp")
     if dens.shape != esp.shape or not np.allclose(origin, o2):
-        raise SystemExit("td und tp liegen nicht auf demselben Gitter.")
-    print(f"[1] Gitter {dens.shape[0]}x{dens.shape[1]}x{dens.shape[2]}, "
-          f"delta {delta[0]:.4f} Bohr, Ursprung {origin[0]:.2f}")
+        raise SystemExit("td and tp are not on the same grid.")
+    print(f"[1] grid {dens.shape[0]}x{dens.shape[1]}x{dens.shape[2]}, "
+          f"delta {delta[0]:.4f} Bohr, origin {origin[0]:.2f}")
 
-    # Ausschnitt aus der Dichte: alles, was die Isoflaeche braucht.
+    # Crop from the density: everything the isosurface needs.
     mask = dens > args.iso / 2.0
     if not mask.any():
-        raise SystemExit(f"Keine Punkte mit rho > {args.iso/2:g} gefunden.")
+        raise SystemExit(f"No points with rho > {args.iso/2:g} found.")
     lo, hi = [], []
     for ax in range(3):
         idx = np.nonzero(mask.any(axis=tuple(a for a in range(3) if a != ax)))[0]
@@ -187,9 +186,9 @@ def main(argv=None):
     sub_d, sub_e = dens[sl], esp[sl]
     new_origin = origin + delta * np.array(lo)
     new_delta = delta * args.stride
-    print(f"[2] Ausschnitt {sub_d.shape[0]}x{sub_d.shape[1]}x{sub_d.shape[2]}, "
+    print(f"[2] crop {sub_d.shape[0]}x{sub_d.shape[1]}x{sub_d.shape[2]}, "
           f"delta {new_delta[0]:.4f} Bohr "
-          f"({sub_d.size:,} statt {dens.size:,} Punkte)")
+          f"({sub_d.size:,} instead of {dens.size:,} points)")
     print(f"    rho {sub_d.min():.2e} .. {sub_d.max():.4g} | "
           f"ESP {sub_e.min():+.4g} .. {sub_e.max():+.4g}")
 
@@ -198,7 +197,8 @@ def main(argv=None):
         write_pointval(out, arr, new_origin, new_delta, QUANTITY[tag])
         print(f"[3] -> {out}  ({os.path.getsize(out)/1024**2:.1f} MB)")
 
-    # Strukturdatei mitnehmen - ohne sie findet run_allVMD.py den Ordner nicht.
+    # Take the structure file along - without it run_allVMD.py does not find
+    # the folder.
     for fn in sorted(os.listdir(src)):
         stem, ext = os.path.splitext(fn)
         if ext.lower() in (".mol", ".sdf", ".xyz") and stem not in GRIDS:
@@ -206,10 +206,10 @@ def main(argv=None):
             print(f"[4] -> {os.path.join(dest, fn)}")
             break
     else:
-        print("    ! keine Strukturdatei gefunden - von Hand nachlegen",
+        print("    ! no structure file found - add one by hand",
               file=sys.stderr)
 
-    print("\nSelbsttest:  python run_allVMD.py")
+    print("\nSelf test:  python run_allVMD.py")
     return 0
 
 

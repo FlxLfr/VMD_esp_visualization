@@ -1,24 +1,24 @@
 # ==============================================================
-# render_esp.tcl - die drei Standardansichten strahlverfolgt nach images/
+# render_esp.tcl - the three standard views, ray traced, into images/
 #
-# Aufruf aus dem Molekuelordner (dort, wo esp.tcl und die Cubes liegen):
+# Call it from the molecule folder (where esp.tcl and the cubes live):
 #
 #     vmd -e ../../scripts/render_esp.tcl
 #
-# Ueblicherweise ruft render_esp.py dieses Skript auf und macht danach die
-# Farbskala und settings.txt. Direkt gestartet tut es nur den VMD-Teil.
+# Normally render_espVMD.py calls this script and takes care of the colour
+# bar and settings.txt afterwards. Started directly it only does the VMD part.
 #
-# Vorher setzbar (in der Tk Console, dann "source"):
-#   set ESP_RES    {1600 1280}   Fenstergroesse = Bildgroesse
-#   set ESP_QUIT   0             VMD nach dem Rendern offen lassen
-#   set ESP_AO     0             Umgebungsverdeckung aus
-#   set ESP_OPAQUE 1             Isoflaeche opak rendern
-#   set ESP_BG     black          Hintergrundfarbe
-#   set ESP_VIEWS  {sigma}       nur einzelne Ansichten
-#   set ESP_SNAPSHOT 1           Fenstermitschnitt statt Strahlverfolgung
-#   set ESP_SCENE  esp_check.tcl andere Szenendatei (Selbsttest)
-#   set ESP_OUTDIR images_check   anderer Zielordner (Selbsttest)
-#   set ESP_PREFIX brombenzol     Dateipraefix (Standard: Ordnername)
+# Can be set beforehand (in the Tk Console, then "source"):
+#   set ESP_RES    {1600 1280}   window size = image size
+#   set ESP_QUIT   0             leave VMD open after rendering
+#   set ESP_AO     0             ambient occlusion off
+#   set ESP_OPAQUE 1             render the isosurface opaque
+#   set ESP_BG     black          background colour
+#   set ESP_VIEWS  {sigma}       single views only
+#   set ESP_SNAPSHOT 1           window capture instead of ray tracing
+#   set ESP_SCENE  esp_check.tcl a different scene file (self test)
+#   set ESP_OUTDIR images_check   a different target folder (self test)
+#   set ESP_PREFIX brombenzol     file prefix (default: folder name)
 # ==============================================================
 
 if {![info exists ESP_RES]}    { set ESP_RES {1600 1280} }
@@ -26,50 +26,50 @@ if {![info exists ESP_QUIT]}   { set ESP_QUIT 1 }
 if {![info exists ESP_AO]}     { set ESP_AO 1 }
 if {![info exists ESP_OPAQUE]}  { set ESP_OPAQUE 0 }
 if {![info exists ESP_BG]}     { set ESP_BG white }
-# Angehaengt an den Dateinamen - bei mehreren Hintergrundfarben in einem Lauf
-# unterscheidet er die Bildersaetze (<molekuel>_pi_black.tga).
+# Appended to the file name - with several background colours in one run it
+# tells the image sets apart (<molecule>_pi_black.tga).
 if {![info exists ESP_SUFFIX]} { set ESP_SUFFIX "" }
 if {![info exists ESP_VIEWS]}  { set ESP_VIEWS {pi edge sigma} }
 if {![info exists ESP_SNAPSHOT]} { set ESP_SNAPSHOT 0 }
-# Der Selbsttest schreibt seine Szene als esp_check.tcl, damit er die
-# committete esp.tcl eines echten Laufs nicht ueberschreibt.
+# The self test writes its scene as esp_check.tcl, so that it does not
+# overwrite the committed esp.tcl of a real run.
 if {![info exists ESP_SCENE]}  { set ESP_SCENE esp.tcl }
-# Zielordner und Praefix kommen von render_espVMD.py. Stehen sie nicht da,
-# gelten dieselben Vorgaben wie beim Aufruf von Hand: images/ und der Name des
-# Molekuelordners.
+# Target folder and prefix come from render_espVMD.py. If they are not set,
+# the same defaults apply as for a call by hand: images/ and the name of the
+# molecule folder.
 if {![info exists ESP_OUTDIR]} { set ESP_OUTDIR images }
 if {![info exists ESP_PREFIX]} { set ESP_PREFIX [file tail [pwd]] }
 
 if {![file exists $ESP_SCENE]} {
-    puts "render_esp.tcl: $ESP_SCENE nicht gefunden."
-    puts "  Aus dem Molekuelordner starten, oder erst xyzToCubeToVMDVis.py laufen lassen."
+    puts "render_esp.tcl: $ESP_SCENE not found."
+    puts "  Start it from the molecule folder, or run xyzToCubeToVMDVis.py first."
     if {$ESP_QUIT} { quit }
     return
 }
 
 source $ESP_SCENE
 
-# Notausgang fuer die Achsenansicht: dort schneidet jeder Sehstrahl viele
-# transparente Lagen der Isoflaeche, und mit Umgebungsverdeckung zusammen
-# bringt das Tachyon zum Absturz. Opak gerendert faellt die Transparenz-
-# rekursion weg. render_esp.py schaltet das nur zu, wenn es noetig war.
+# Emergency exit for the axial view: there every line of sight crosses many
+# transparent layers of the isosurface, and together with ambient occlusion
+# that crashes Tachyon. Rendered opaque, the transparency recursion goes away.
+# render_espVMD.py only switches this on when it was needed.
 if {$ESP_OPAQUE} { esp_opacity 1.0 }
 
-# --- Renderqualitaet ------------------------------------------
-# Diese Einstellungen wirken im OpenGL-Fenster kaum und im Strahlverfolger
-# stark. Vor allem die Umgebungsverdeckung: sie legt weiche Schatten in die
-# Vertiefungen zwischen den CH-Ausbuchtungen und ist der groesste Einzelschritt
-# von "Vorschau" zu "Publikationsbild".
-# Die Umgebungsverdeckung wirft keine objektfoermigen Flecken, sondern dunkelt
-# nur Vertiefungen ab - deshalb ist sie zuschaltbar.
+# --- Render quality -------------------------------------------
+# These settings barely show in the OpenGL window and show strongly in the ray
+# tracer. Ambient occlusion above all: it lays soft shadows into the hollows
+# between the CH bulges and is the largest single step from "preview" to
+# "publication figure".
+# Ambient occlusion casts no object-shaped patches, it only darkens hollows -
+# which is why it can be switched on.
 #
-# Schlagschatten dagegen bleiben fest aus, ohne Option. Sie werfen die
-# Licorice-Staebchen als graue Kapseln auf die Isoflaeche: im pi-Bild sitzt
-# hinter jedem Staebchen ein versetzter Doppelgaenger, in der Achsenansicht
-# liegt ein Stab-Schatten mitten auf der Kugel. Beides sieht aus wie ein
-# Artefakt der Daten und ist keines, und PyMOL rendert ebenfalls ohne - das
-# haelt die Bilder vergleichbar. Wer sie doch sehen will, schaltet sie in der
-# Tk Console zu: 'display shadows on', dann 'esp_snapshot <name>'.
+# Drop shadows, in contrast, stay off for good, without an option. They cast
+# the licorice sticks onto the isosurface as grey capsules: in the pi image an
+# offset double sits behind every stick, in the axial view a stick shadow lies
+# in the middle of the sphere. Both look like an artefact of the data and are
+# none, and PyMOL renders without them too - which keeps the images
+# comparable. Anyone who does want to see them switches them on in the Tk
+# Console: 'display shadows on', then 'esp_snapshot <name>'.
 _try display shadows off
 _try color Display Background $ESP_BG
 if {$ESP_AO} {
@@ -82,20 +82,20 @@ _try display depthcue off
 _try display resize [lindex $ESP_RES 0] [lindex $ESP_RES 1]
 display update
 
-# TachyonInternal rendert in Fenstergroesse. Wenn der Bildschirm kleiner ist
-# als ESP_RES, klemmt Windows das Fenster ab und das Bild wird entsprechend
-# kleiner - deshalb wird die tatsaechliche Groesse gemeldet.
-puts "Fenster: [display get size]" ; flush stdout
+# TachyonInternal renders at window size. If the screen is smaller than
+# ESP_RES, Windows clamps the window and the image comes out correspondingly
+# smaller - which is why the actual size is reported.
+puts "Window: [display get size]" ; flush stdout
 
-# Der Fenstermitschnitt ist der Notausgang fuer die Achsenansicht: Tachyon
-# steigt dort an der Zahl der durchquerten transparenten Lagen aus, OpenGL
-# zeichnet sie dagegen ohne Rekursion. Das Bild ist etwas weniger fein, behaelt
-# aber die Transparenz - besser als eine opake Ersatzdarstellung.
-# Achtung: der Mitschnitt kopiert den Bildschirminhalt, das VMD-Fenster darf
-# also nicht verdeckt sein.
+# The window capture is the emergency exit for the axial view: Tachyon bails
+# out there on the number of transparent layers crossed, while OpenGL draws
+# them without recursion. The image is a little less fine but keeps the
+# transparency - better than an opaque substitute.
+# Careful: the capture copies the screen contents, so the VMD window must not
+# be covered.
 #
-# Sonst: auf der GPU liefert der OptiX-Pfad dieselbe Szene schneller. Nicht
-# jeder Build hat ihn.
+# Otherwise: on the GPU the OptiX path renders the same scene faster. Not
+# every build has it.
 set RENDERER TachyonInternal
 if {$ESP_SNAPSHOT} {
     set RENDERER snapshot
@@ -104,28 +104,28 @@ if {$ESP_SNAPSHOT} {
 }
 puts "Renderer: $RENDERER" ; flush stdout
 
-# --- Rendern --------------------------------------------------
+# --- Render ---------------------------------------------------
 file mkdir $ESP_OUTDIR
 set prefix $ESP_PREFIX
-puts "Ziel: $ESP_OUTDIR" ; flush stdout
+puts "Target: $ESP_OUTDIR" ; flush stdout
 
-# Jede Ansicht einzeln absichern: bricht eine ab - Tachyon kann bei grossen
-# Isoflaechen mit Umgebungsverdeckung aussteigen -, sollen die anderen trotzdem
-# entstehen. Und nach jeder Zeile flush, damit im Log steht, wie weit VMD kam,
-# falls der Prozess mittendrin stirbt.
+# Guard every view separately: if one aborts - Tachyon can bail out on large
+# isosurfaces with ambient occlusion - the others should still be produced.
+# And flush after every line, so that the log shows how far VMD got if the
+# process dies halfway through.
 foreach view $ESP_VIEWS {
     set out [file join $ESP_OUTDIR "${prefix}_${view}${ESP_SUFFIX}.tga"]
-    puts "== $view: beginne ==" ; flush stdout
+    puts "== $view: start ==" ; flush stdout
     if {[catch {esp_view $view ; display update} err]} {
-        puts "! $view: Ansicht fehlgeschlagen: $err" ; flush stdout
+        puts "! $view: view failed: $err" ; flush stdout
         continue
     }
     if {[catch {render $RENDERER $out} err]} {
-        puts "! $view: Rendern fehlgeschlagen: $err" ; flush stdout
+        puts "! $view: render failed: $err" ; flush stdout
     } else {
         puts "-> $out" ; flush stdout
     }
 }
 
-puts "render_esp.tcl fertig. PNG und Farbskala macht render_esp.py."
+puts "render_esp.tcl done. render_espVMD.py makes the PNGs and the colour bar."
 if {$ESP_QUIT} { quit }
