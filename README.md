@@ -110,7 +110,8 @@ must never overwrite the committed reference files, otherwise you can no longer
 tell whether the reference is still the reference.
 
 Compare your `images_check/` with the committed `images/` and your
-`summary_check_<date>.csv` with `summary.csv`. On the decimated reference grid
+`summary_check_<date>.csv` with the committed `summary_<date>.csv`. On the
+decimated reference grid
 expect:
 
 | | |
@@ -578,7 +579,7 @@ VMD_esp_visualization/
 │   ├── run_allVMD.py             batch driver + dated summary CSV
 │   └── constants.py              unit conversions, shared by all scripts
 ├── reference/                    known-good example — output, not input
-│   ├── summary.csv
+│   ├── summary_<date>.csv
 │   └── brombenzol/
 │       ├── brombenzol_aro_opti.mol
 │       ├── td.xyz                raw pointval grids, decimated to 0.60 Bohr
@@ -587,7 +588,7 @@ VMD_esp_visualization/
 ├── tools/
 │   └── make_reference.py         decimated reference set from a full folder
 ├── results/                      the delivered image set, seven molecules
-│   ├── summary_<date>.csv
+│   ├── summary_<date>.csv       one per run; `_rainbow` for a rainbow run
 │   ├── Pyridine/  Me-Pyr/  CN-Pyr/  NO2-Pyr/   pyridines, provided
 │   ├── I-Pyr/  Cl-NO2-Pyr/                     Turbomole data
 │   ├── brombenzol/                             the halobenzene example

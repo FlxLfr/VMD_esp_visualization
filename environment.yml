@@ -4,7 +4,7 @@
 #   conda activate esp-vmd
 #
 # VMD is NOT a conda package - install it separately from
-# https://www.ks.uiuc.edu/Research/vmd/alpha/ (README section 5).
+# https://www.ks.uiuc.edu/Research/vmd/alpha/.
 #
 # numpy      Gitterkonvertierung und die Schalenstatistik
 # matplotlib Farbskala als eigenes PNG (wie in der PyMOL-Pipeline)

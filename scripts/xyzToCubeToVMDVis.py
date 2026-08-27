@@ -286,9 +286,17 @@ STATS_RE = re.compile(r"V_S,min=(\S+)\s+V_S,max=(\S+)\s+range=(\S+)"
 
 
 def stats_comment(stats, iso):
-    """Statistics for the first cube line, so that --tcl-only finds them again."""
+    """Statistics for the first cube line, so that --tcl-only finds them again.
+
+    Eight decimals, not six. The values are reported to five, and six decimals
+    put the stamp one digit away from that: a value like -0.018825 sits exactly
+    on the rounding boundary, so reading it back and rounding a second time can
+    land on -0.01883 where the full float gives -0.01882. Two extra digits move
+    the stamp far enough from the boundary that the second rounding cannot
+    disagree with the first. Cubes stamped with six decimals still parse.
+    """
     vmin, vmax, amp, npts = stats
-    return (f" | V_S,min={vmin:+.6f} V_S,max={vmax:+.6f} range={amp:.4f}"
+    return (f" | V_S,min={vmin:+.8f} V_S,max={vmax:+.8f} range={amp:.4f}"
             f" iso={iso:g} n={npts}")
 
 

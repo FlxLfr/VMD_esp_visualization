@@ -569,8 +569,8 @@ def main(argv=None):
         print(f"Common scale: +/- {common:.4f} a.u.")
     print(f"CSV: {summary}")
     if is_reference:
-        print("Now compare with reference/summary.csv and "
-              "reference/*/images/.")
+        print("Now compare with the committed reference/summary_*.csv "
+              "and reference/*/images/.")
     advise(mode, common, needed, rows, raw_argv)
     return 0
 

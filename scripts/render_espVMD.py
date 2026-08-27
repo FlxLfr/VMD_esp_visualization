@@ -310,7 +310,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
         vmd = find_vmd(vmd)
         if not vmd:
             sys.exit("vmd not found. Pass it with --vmd <path>, or add the "
-                     "VMD folder to the PATH (README section 8).")
+                     "VMD folder to the PATH.")
         try:
             w, h = res.lower().split("x")
         except ValueError:

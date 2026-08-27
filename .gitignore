@@ -23,7 +23,7 @@ tp.xyz
 # It must never overwrite or shadow the committed reference images.
 **/images_check/
 **/esp_check.tcl
-reference/summary_check.csv
+reference/summary_check*.csv
 
 # ---------------------------------------------------------------------------
 # VMD scratch output
