@@ -64,6 +64,8 @@ import fnmatch
 import os
 import sys
 
+import numpy as np
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
@@ -192,6 +194,9 @@ def ensure_cubes(entry, args):
         print("    cubes present but without statistics - recomputing them")
         density = conv.read_cube(cubes["td"])
         esp = conv.read_cube(cubes["tp"])
+        cube_atoms, cube_origin, cube_voxel = conv.read_cube_frame(cubes["td"])
+        conv.check_alignment(density, cube_atoms, cube_origin, cube_voxel,
+                             label=os.path.basename(folder))
         return cubes, conv.shell_range(density, esp, args.iso)
 
     if entry["struct"] is None:
@@ -205,6 +210,15 @@ def ensure_cubes(entry, args):
             raise SystemExit(f"{folder}: neither {tag}.cube nor {tag}.xyz")
         print(f"    converting {tag}.xyz -> {tag}.cube (stride {args.stride})")
         grids[tag] = conv.read_values(raw, verbose=False)
+
+    # The structure file is married to the grid right here - so this is where
+    # a mismatch has to be caught, before minutes of rendering go into it.
+    info_d = grids["td"][0]
+    origin_d = info_d["origin"] + sum(info_d["grid"][i][0] * info_d["vectors"][i]
+                                      for i in range(3))
+    delta_d = np.array([info_d["grid"][i][1] for i in range(3)])
+    conv.check_alignment(grids["td"][1], atoms, origin_d, delta_d,
+                         label=os.path.basename(folder))
 
     stats = conv.shell_range(grids["td"][1], grids["tp"][1], args.iso)
     for tag in GRID_NAMES:
@@ -491,9 +505,21 @@ def main(argv=None):
     print("\n" + "-" * 70)
     print("Step 1: cubes and statistics")
     print("-" * 70)
+    # One unusable molecule must not cost the other eight their run: it is
+    # skipped, named again at the end, and the exit code says something went
+    # wrong. Every other error still stops the run - a mismatched structure is
+    # the one failure that is both survivable and worth continuing past.
+    ok_entries, skipped_bad = [], []
     for e in entries:
-        print(f"\n[{os.path.basename(os.path.normpath(e['dir']))}]")
-        e["cubes"], e["stats"] = ensure_cubes(e, args)
+        name = os.path.basename(os.path.normpath(e["dir"]))
+        print(f"\n[{name}]")
+        try:
+            e["cubes"], e["stats"] = ensure_cubes(e, args)
+        except conv.StructureGridMismatch as err:
+            print(f"    ! {err}")
+            print(f"    ! {name} skipped - no scene and no images written.")
+            skipped_bad.append(name)
+            continue
         e["grid"] = cube_dims(e["cubes"]["td"])
         if e["stats"]:
             v0, v1, amp, n = e["stats"]
@@ -501,6 +527,10 @@ def main(argv=None):
                   f"({n} points)  -> +/- {amp:.4f}")
         else:
             print("    ! no shell found - statistics missing")
+        ok_entries.append(e)
+    entries = ok_entries
+    if not entries:
+        raise SystemExit("No molecule could be processed.")
 
     # --- Fix the colour scale -----------------------------------------------
     # needed = the scale that covers ALL molecules of this run. It is always
@@ -607,6 +637,10 @@ def main(argv=None):
         print("Now compare with the committed reference/summary_*.csv "
               "and reference/*/images/.")
     advise(mode, common, needed, rows, raw_argv)
+    if skipped_bad:
+        print(f"\n! skipped, structure and grid do not match: "
+              f"{', '.join(skipped_bad)}")
+        return 1
     return 0
 
 

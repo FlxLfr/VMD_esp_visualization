@@ -342,6 +342,25 @@ def read_cube_atoms(path):
     return atoms
 
 
+def read_cube_frame(path):
+    """Atoms, origin and voxel vectors of a cube - the geometry of its header."""
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        fh.readline()
+        fh.readline()
+        p = fh.readline().split()
+        natoms = abs(int(p[0]))
+        origin = np.array([float(v) for v in p[1:4]])
+        voxel = []
+        for _ in range(3):
+            q = fh.readline().split()
+            voxel.append([float(v) for v in q[1:4]])
+        atoms = []
+        for _ in range(natoms):
+            q = fh.readline().split()
+            atoms.append((int(q[0]), float(q[2]), float(q[3]), float(q[4])))
+    return atoms, origin, np.array(voxel)
+
+
 def read_stats(cube_path):
     """Statistics from the first line of a cube written earlier."""
     with open(cube_path, "r", encoding="utf-8", errors="replace") as fh:
@@ -495,6 +514,95 @@ def view_matrices(atoms):
         min(1.0, abs(float(np.dot(sigma_axis, normal)))))))
     return {k: tcl_matrix(m) for k, m in mats.items()}, label, tilt
 
+
+# ----------------------------------------------------------------------------
+# Does the structure belong to the grid?
+# ----------------------------------------------------------------------------
+
+class StructureGridMismatch(Exception):
+    """The structure file is not the geometry the grids were computed from."""
+
+
+# Median electron density at a heavy nucleus, below which the two do not
+# belong together. Measured across the molecules of this project:
+#
+#     grid spacing 0.12 Bohr   median  64
+#     grid spacing 0.25 Bohr   median  27
+#     grid spacing 0.60 Bohr   median   5      the decimated reference set
+#     ------------------------------------
+#     structure from a different run       0.03
+#
+# A coarse grid pushes the value down, because the nucleus then sits further
+# from the nearest grid point and the density peak falls off steeply. 1.0 is a
+# factor of five below the coarsest healthy case and thirty above the broken
+# one; there is nothing in between that could be mistaken for the other.
+NUCLEI_RHO_MIN = 1.0
+
+
+def nuclei_density(density, atoms, origin, voxel):
+    """Median electron density at the heavy nuclei, or None if not applicable.
+
+    A cube file marries two things from different sources: the atom list comes
+    from the structure file, the grid from the quantum chemistry. Nothing in
+    the format forces them to agree, and when they do not, the molecule floats
+    beside its own isosurface - and every number of the run refers to atoms
+    that are not where the density says they are.
+
+    The check is one line of physics: where a nucleus sits, the electron
+    density is enormous (about 60 for carbon on a fine grid), and where there
+    is none it is near zero. So look up the density at every atom position; if
+    the two belong together, the nuclei sit on peaks.
+
+    Two details matter:
+
+    * The MEDIAN, not the minimum. Iodine is described by an effective core
+      potential, so its core electrons are not in the density at all and its
+      nucleus carries about 0.26 - less than a hydrogen, on a perfectly
+      healthy molecule. A minimum would reject every iodine compound. The
+      median tolerates a minority of such atoms.
+    * The largest value in the 3x3x3 neighbourhood, not the value at the
+      nearest point. A nucleus rarely sits exactly on a grid point, and this
+      removes the luck of where it falls. Trilinear interpolation would be the
+      wrong tool here: the density has a cusp at the nucleus, and interpolation
+      cuts the peak off - measured at 46 % too low on the coarse grid.
+    """
+    if density is None or not atoms:
+        return None
+    vox = np.asarray(voxel, dtype=float)
+    if vox.ndim == 2:
+        diag = np.diag(vox)
+        if not np.allclose(vox, np.diag(diag)):
+            return None                    # not axis-aligned - no cheap lookup
+        vox = diag
+    shape = np.array(density.shape)
+    vals = []
+    for atom in atoms:
+        z = atom[0]
+        if z <= 1:
+            continue                       # hydrogen carries too little
+        i = np.rint((np.array(atom[1:4]) - origin) / vox).astype(int)
+        if (i < 0).any() or (i >= shape).any():
+            vals.append(0.0)               # outside the grid counts as a miss
+            continue
+        lo = np.maximum(i - 1, 0)
+        hi = np.minimum(i + 2, shape)
+        vals.append(float(density[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]].max()))
+    return float(np.median(vals)) if vals else None
+
+
+def check_alignment(density, atoms, origin, voxel, label=""):
+    """Raise StructureGridMismatch if structure and grid do not belong together."""
+    med = nuclei_density(density, atoms, origin, voxel)
+    if med is None or med >= NUCLEI_RHO_MIN:
+        return med
+    where = f"{label}: " if label else ""
+    raise StructureGridMismatch(
+        f"{where}structure and grid do not match. The median electron density "
+        f"at the heavy nuclei is {med:.3f}, expected > {NUCLEI_RHO_MIN:g} - "
+        f"the atoms sit in near-empty space.\n"
+        f"    The structure file is probably not the geometry the grids were "
+        f"computed from (a different conformer, a different orientation, or a "
+        f"left-over file from an earlier run).")
 
 # ----------------------------------------------------------------------------
 # Writing the cube
