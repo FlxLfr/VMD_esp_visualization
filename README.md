@@ -104,13 +104,13 @@ python run_allVMD.py
 Without parameters `run_allVMD.py` runs on `reference/brombenzol/`. It converts,
 writes the scene, renders, and puts the images in
 `reference/brombenzol/images_check/` plus a summary in
-`reference/summary_check_<date>.csv`. The `_check` names are deliberate: the
+`reference/summary_check_<time>_<date>.csv`. The `_check` names are deliberate: the
 smoke test
 must never overwrite the committed reference files, otherwise you can no longer
 tell whether the reference is still the reference.
 
 Compare your `images_check/` with the committed `images/` and your
-`summary_check_<date>.csv` with the committed `summary_<date>.csv`. On the
+`summary_check_<time>_<date>.csv` with the committed `summary_<time>_<date>.csv`. On the
 decimated reference grid
 expect:
 
@@ -403,7 +403,7 @@ python run_allVMD.py --root ../sandbox
 ```
 
 This converts what needs converting, writes an `esp.tcl` next to each molecule's
-cube files, renders every molecule and collects a dated `summary_<date>.csv` at the root. Called
+cube files, renders every molecule and collects a dated `summary_<time>_<date>.csv` at the root. Called
 **without arguments** it runs on `reference/` instead, conducting the smoke test from §1.3.
 If you are too lazy for the --root option, just use the `reference/` folder as your sandbox
 
@@ -429,7 +429,7 @@ files, so no rendering is needed to find them.
 | `--backgrounds` | `white` | one or more background colours, passed through |
 | `--ao`, `--keep-tga`, `--dpi`, `--vmd` | | passed through |
 | `--images-dir` | `images` (`images_check` for the built-in reference run) | output folder inside each molecule folder |
-| `--summary` | `<root>/summary_DD-MM-YYYY.csv` | path of the CSV summary. The date keeps a later run from overwriting an earlier one; `--rainbow` adds `_rainbow`, the smoke test `_check`. |
+| `--summary` | `<root>/summary_HH-MM_DD-MM-YYYY.csv` | path of the CSV summary. The time stamp keeps a later run from overwriting an earlier one, two runs on the same day included; `--rainbow` adds `_rainbow`, the smoke test `_check`. |
 
 ### Examples
 
@@ -484,11 +484,11 @@ With `--rainbow` the same names appear with `_rainbow` inserted
 overwrites the standard set.
 
 The smoke test writes the same files under `_check` names (`esp_check.tcl`,
-`images_check/`, `summary_check_<date>.csv`) so it can never overwrite the
+`images_check/`, `summary_check_<time>_<date>.csv`) so it can never overwrite the
 committed reference.
 
-Per run, `run_allVMD.py` writes `summary_<DD-MM-YYYY>.csv`. A `--rainbow` run
-writes `summary_rainbow_<date>.csv` instead, so the two sets never overwrite
+Per run, `run_allVMD.py` writes `summary_<HH-MM>_<DD-MM-YYYY>.csv`. A `--rainbow` run
+writes `summary_rainbow_<time>_<date>.csv` instead, so the two sets never overwrite
 each other:
 
 | Column | Content |
@@ -579,7 +579,7 @@ VMD_esp_visualization/
 │   ├── run_allVMD.py             batch driver + dated summary CSV
 │   └── constants.py              unit conversions, shared by all scripts
 ├── reference/                    known-good example — output, not input
-│   ├── summary_<date>.csv
+│   ├── summary_<time>_<date>.csv
 │   └── brombenzol/
 │       ├── brombenzol_aro_opti.mol
 │       ├── td.xyz                raw pointval grids, decimated to 0.60 Bohr
@@ -588,7 +588,7 @@ VMD_esp_visualization/
 ├── tools/
 │   └── make_reference.py         decimated reference set from a full folder
 ├── results/                      the delivered image set, seven molecules
-│   ├── summary_<date>.csv       one per run; `_rainbow` for a rainbow run
+│   ├── summary_<time>_<date>.csv       one per run; `_rainbow` for a rainbow run
 │   ├── Pyridine/  Me-Pyr/  CN-Pyr/  NO2-Pyr/   pyridines, provided
 │   ├── I-Pyr/  Cl-NO2-Pyr/                     Turbomole data
 │   ├── brombenzol/                             the halobenzene example

@@ -8,15 +8,15 @@ run_allVMD.py - batch run of the VMD pipeline
 
 Without --root the script runs on the reference dataset that ships with the
 repository. That is the self test: it writes to images_check/ and
-summary_check_<date>.csv so that the committed reference images stay
+summary_check_<time>_<date>.csv so that the committed reference images stay
 untouched, and afterwards you compare your own numbers with those in
 reference/.
 
 It walks a directory tree and does everything for each molecule folder in one
 go: pointval -> cube, write esp.tcl, render the three views with Tachyon, plus
 the colour bar and settings.txt. At the end there is a dated
-summary_<DD-MM-YYYY>.csv with the statistics and the render parameters; a
---rainbow run writes its own summary_rainbow_<date>.csv, so no run overwrites
+summary_<HH-MM>_<DD-MM-YYYY>.csv with the statistics and the render parameters; a
+--rainbow run writes its own summary_rainbow_<time>_<date>.csv, so no run overwrites
 the summary of another.
 
 A molecule folder is any directory holding
@@ -197,19 +197,23 @@ FIELDS = ["molecule", "structure", "grid", "iso_au", "shell_points",
 
 
 def summary_name(is_reference, rainbow, when=None):
-    """summary[_check][_rainbow]_DD-MM-YYYY.csv
+    """summary[_check][_rainbow]_HH-MM_DD-MM-YYYY.csv
 
-    Dated on purpose, so that a later run does not silently overwrite the
-    summary of an earlier one. The _rainbow part matters just as much: the
-    scene and the images already carry that suffix, and without it here the
-    CSV was the one file a --rainbow run clobbered - a run over one molecule
-    replaced the summary of the whole set, and the loss was invisible until
-    someone opened the file.
+    Time-stamped on purpose, so that a later run does not silently overwrite
+    the summary of an earlier one. The date alone was not enough: two runs on
+    the same day - the usual case while a parameter is being settled - landed
+    on the same name again. The minute is the coarsest unit that separates
+    them in practice.
+
+    The _rainbow part matters just as much: the scene and the images already
+    carry that suffix, and without it here the CSV was the one file a
+    --rainbow run clobbered - a run over one molecule replaced the summary of
+    the whole set, and the loss was invisible until someone opened the file.
 
     The same name is built in the sister project (run_all.py), so summaries
     from the two pipelines can be filed next to each other.
     """
-    stamp = (when or datetime.date.today()).strftime("%d-%m-%Y")
+    stamp = (when or datetime.datetime.now()).strftime("%H-%M_%d-%m-%Y")
     parts = ["summary"]
     if is_reference:
         parts.append("check")
@@ -397,8 +401,8 @@ def main(argv=None):
                         "'images', 'images_check' in the self test)")
     g.add_argument("--summary", default=None,
                    help="path of the CSV (default: "
-                        "<root>/summary_DD-MM-YYYY.csv, with _check on the "
-                        "self test and _rainbow with --rainbow)")
+                        "<root>/summary_HH-MM_DD-MM-YYYY.csv, with _check "
+                        "on the self test and _rainbow with --rainbow)")
     args = p.parse_args(argv)
     # For the recommendation at the end: the same call, only with a different
     # scale.
