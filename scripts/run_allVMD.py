@@ -85,21 +85,52 @@ DEFAULT_ROOT = os.path.normpath(os.path.join(_HERE, "..", "reference"))
 # ----------------------------------------------------------------------------
 
 def find_structure(folder, exclude):
-    """The first structure file in the folder that is not a grid file."""
+    """The structure file in ``folder``, or None if there is none.
+
+    Aborts when the folder holds more than one candidate that is not simply
+    the same structure in a second format.
+    """
     excl = {os.path.abspath(p) for p in exclude if p}
+    found = []
+    for name in sorted(os.listdir(folder)):
+        stem, ext = os.path.splitext(name)
+        if ext.lower() not in STRUCT_EXT:
+            continue
+        path = os.path.join(folder, name)
+        if os.path.abspath(path) in excl:
+            continue
+        if stem in GRID_NAMES:
+            continue                       # td.xyz / tp.xyz are data
+        found.append((stem, ext.lower(), path))
+
+    if not found:
+        return None
+
+    # One structure in several formats is fine - brombenzol_aro_opti.mol next
+    # to brombenzol_aro_opti.xyz is the same geometry twice. Anything else is
+    # ambiguous, and the script must not pick for you: it would take the first
+    # in sort order, and a stale left-over file sorting first silently pairs
+    # the wrong geometry with the grids. That produces a molecule floating
+    # beside its own isosurface, and every number in the run - the extrema,
+    # the atom labels, the sigma hole - refers to atoms that are not where the
+    # density says they are.
+    stems = {s.lower() for s, _, _ in found}
+    exts = [e for _, e, _ in found]
+    if len(stems) > 1 or len(exts) != len(set(exts)):
+        listing = "\n".join(f"      {os.path.basename(p)}" for _, _, p in found)
+        raise SystemExit(
+            f"{folder}: located {len(found)} structure files, keep the correct "
+            f"one to proceed.\n{listing}\n"
+            f"    They are not one structure in two formats, so the script "
+            f"cannot tell which geometry belongs to the grids.")
+
     # .mol/.sdf before .xyz: they carry bond information, and a bare .xyz
     # easily collides with the Turbomole grid files of the same extension.
     for ext in STRUCT_EXT:
-        for name in sorted(os.listdir(folder)):
-            if not name.lower().endswith(ext):
-                continue
-            path = os.path.join(folder, name)
-            if os.path.abspath(path) in excl:
-                continue
-            if os.path.splitext(name)[0] in GRID_NAMES:
-                continue                   # td.xyz / tp.xyz are data
-            return path
-    return None
+        for _, e, path in found:
+            if e == ext:
+                return path
+    return found[0][2]
 
 
 def discover(root):
