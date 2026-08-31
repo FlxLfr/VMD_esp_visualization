@@ -419,6 +419,10 @@ def main(argv=None):
     g.add_argument("--scale", default="auto", help="zoom, a number or 'auto'")
     g.add_argument("--fill", type=float, default=0.85,
                    help="fraction of the image height for the molecule with --scale auto")
+    g.add_argument("--stick-size", type=float,
+                   default=conv.STICK_SIZE_DEFAULT,
+                   help="bond radius of the Licorice skeleton in Angstrom "
+                        "(default: %(default)g)")
     g.add_argument("--rainbow", action="store_true",
                    help="rainbow ramp instead of red-white-blue. Writes "
                         "esp_rainbow.tcl and an image set of its own, "
@@ -583,6 +587,7 @@ def main(argv=None):
             scale=(args.scale if str(args.scale) == "auto"
                    else float(args.scale)),
             fill=args.fill, rainbow=args.rainbow,
+            stick_size=args.stick_size,
             sources=", ".join(os.path.basename(c)
                               for c in e["cubes"].values()))
         print(f"    -> {tcl}   (colour scale +/- {rng:.4f} a.u.)")

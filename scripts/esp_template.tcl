@@ -86,7 +86,10 @@ set REP_MOL  0
 set REP_SURF 1
 
 _try color Name C gray
-mol representation Licorice 0.150000 24.000000 24.000000
+# Licorice <bond radius> <sphere resolution> <cylinder resolution>. The two
+# resolutions are facet counts, not sizes: 24 keeps the cylinders round at
+# full zoom without costing noticeable render time at this image size.
+mol representation Licorice @@STICK@@ 24.000000 24.000000
 mol color Name
 mol selection {all}
 mol material Opaque

@@ -693,6 +693,13 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
 # colour table with the five anchor colours from RAMP_HEX.
 COLOR_SCALE = {"redblue": "RWB", "rainbow": "RGB"}
 
+# Bond radius of the Licorice skeleton in Angstrom. Thin on purpose: the
+# sticks say WHERE on the molecule a coloured patch sits, they are not the
+# subject. Wider ones cover the surface they are meant to explain, and behind
+# the transparent isosurface they turn into a dark band that reads as
+# negative potential.
+STICK_SIZE_DEFAULT = 0.1
+
 RAMP_HEX = {
     "rainbow": ["#d40000", "#f0e000", "#00a000", "#00c8d4", "#0030d4"],
     "redblue": ["#d40000", "#ffffff", "#0030d4"],
@@ -714,7 +721,8 @@ def ramp_stops(name):
 
 def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
                      opacity=0.50, scale="auto", fill=0.85,
-                     sources="", atoms=None, rainbow=False):
+                     sources="", atoms=None, rainbow=False,
+                     stick_size=STICK_SIZE_DEFAULT):
     """Fills in esp_template.tcl.
 
     Via @@PLACEHOLDER@@ rather than str.format or string.Template: Tcl uses
@@ -763,6 +771,7 @@ def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
         "@@KJ@@": f"{-esp_range * HARTREE_TO_KJ:.0f} .. "
                   f"{esp_range * HARTREE_TO_KJ:+.0f}",
         "@@OPACITY@@": f"{opacity:.6f}",
+        "@@STICK@@": f"{stick_size:.6f}",
         "@@SCALE@@": scale if scale == "auto" else f"{scale:g}",
         "@@FILL@@": f"{fill:g}",
         "@@COLORSCALE@@": COLOR_SCALE["rainbow" if rainbow else "redblue"],
@@ -822,6 +831,11 @@ def main(argv=None):
     g.add_argument("--fill", type=float, default=0.85,
                    help="fraction of the window height for the molecule with "
                         "--scale auto (default 0.85)")
+    g.add_argument("--stick-size", type=float, default=STICK_SIZE_DEFAULT,
+                   help=f"bond radius of the Licorice skeleton in Angstrom "
+                        f"(default: {STICK_SIZE_DEFAULT:g}). Thin sticks keep "
+                        f"the surface readable; from about 0.25 on they hide "
+                        f"the colour they are meant to locate.")
     g.add_argument("--rainbow", action="store_true",
                    help="rainbow ramp instead of red-white-blue. Writes "
                         "esp_rainbow.tcl, so that the standard scene is "
@@ -934,6 +948,7 @@ def main(argv=None):
                             else float(args.scale)),
                      fill=args.fill,
                      rainbow=args.rainbow,
+                     stick_size=args.stick_size,
                      sources=", ".join(os.path.basename(g) for g in args.grids))
     if verbose:
         print(f"[4] VMD scene: {tcl}   (colour scale +/- {rng:.4f} a.u.)")

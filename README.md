@@ -52,7 +52,8 @@ the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 5. [What the workflow writes](#5-what-the-workflow-writes)
 6. [Console output](#6-console-output)
 7. [Create Tp.xyz, Td.xyz and a structure file from a SMILES notation](#7-create-tpxyz-tdxyz-and-a-structure-file-from-a-smiles-notation)
-8. [Repository layout](#8-repository-layout)
+8. [The sigma hole, outside the workflow (`tools/SigmaHoleCalc.py`)](#8-the-sigma-hole-outside-the-workflow-toolssigmaholecalcpy)
+9. [Repository layout](#9-repository-layout)
 
 ---
 
@@ -220,6 +221,7 @@ not from the file name. Expect a minute or two per grid.
 | `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
 | `--scale` | `auto` | zoom, a number or `auto`, derived from the molecule's size and the window height. |
 | `--fill` | `0.85` | fraction of the image height the molecule fills at `--scale auto`. |
+| `--stick-size` | `0.1` | bond radius of the Licorice skeleton in Å. Thin sticks locate a coloured patch without covering it.|
 | `--rainbow` | off | rainbow ramp instead of red–white–blue; writes `esp_rainbow.tcl` so the standard scene survives. |
 
 #### Examples
@@ -423,6 +425,7 @@ files, so no rendering is needed to find them.
 | `--iso` | `0.001` | density isovalue, passed through |
 | `--opacity` | `0.50` | passed through |
 | `--scale`, `--fill` | `auto`, `0.85` | zoom, passed through |
+| `--stick-size` | `0.1` | bond radius of the Licorice skeleton in Å, passed through |
 | `--rainbow` | off | rainbow ramp; writes `esp_rainbow.tcl` and a separate `<molecule>_rainbow_*` set |
 | `--no-render` | off | convert and write the scene only |
 | `--res` | `1600x1280` | passed through |
@@ -564,7 +567,70 @@ Do not read numbers off it. Running it needs a separate environment; see
 
 ---
 
-## 8. Repository layout
+## 8. The sigma hole, outside the workflow (`tools/SigmaHoleCalc.py`)
+
+The rendering pipeline needs V_S,min and V_S,max for the colour scale and
+nothing else; locating the σ-hole is a separate analysis. It therefore lives in
+`tools/` and **`run_allVMD.py` does not call it** — a broken σ-hole can never
+cost you an image set.
+
+```bash
+cd tools
+python SigmaHoleCalc.py --folder ../results/brombenzol
+```
+
+It reads the finished `td.cube` and `tp.cube`. The atom block sits in the cube
+header, so no structure file is needed and no alignment question arises. Run it
+without `--folder` and it works on `reference/brombenzol` as a self test.
+
+**Why rays instead of grid points.** The σ-hole is a peak *on* the C–X axis.
+Whether a grid point happens to sit there *and* inside the thin ρ = iso shell
+at the same time is luck. So 400 rays are cast from the halogen into a cone
+around the axis; on each one the radius at which ρ crosses the isovalue is
+found and V read off there, both by trilinear interpolation. Both numbers are
+printed, so the difference stays visible:
+
+```
+  Cl21
+    sigma hole  = +0.01709 a.u. =   +44.9 kJ/(mol*e) =  +10.7 kcal/(mol*e)   [interpolated, 3.8 degrees off the C-Cl axis]
+    grid points = +0.02675 a.u. =   +70.2 kJ/(mol*e) =  +16.8 kcal/(mol*e)   [point-based, 117 points in the cap]
+    belt        = -0.01836 a.u. =   -48.2 kJ/(mol*e) =  -11.5 kcal/(mol*e)   [508 points]
+```
+
+The bracket is the same one `render_esp.py` prints in the PyMOL project, so the
+two consoles can be read side by side. The ray count is appended only when rays
+were lost — "400 of 400" every time is noise, a shortfall is not.
+
+**Read the angle.** It is the quality control. `0.0 degrees` means the maximum
+sits on the axis — the normal case. A value at the rim of the cone (≈36.9° at
+the default `--cone`) means there is no maximum inside the cone at all;
+fluorine reports that reliably, because it has no σ-hole.
+
+Molecules with several halogens are measured one by one and reported strongest
+first. A molecule without a halogen says so and stops.
+
+### Options
+
+| Option | Default | Effect |
+|---|---|---|
+| `--folder` | `reference/brombenzol` (self test) | molecule folder with `td.cube` and `tp.cube` |
+| `--iso` | `0.001` | isovalue the σ-hole is read on. **Changes the measured value.** |
+| `--rays` | `400` | rays per halogen |
+| `--cone` | `0.80` | cosine of the cone half-angle, i.e. 36.9° |
+| `--step` | `0.02` | step along a ray in Bohr |
+| `--csv [PATH]` | off | also write the result as CSV. Bare `--csv` writes `sigma_holes_<molecule>.csv` next to the cube files. |
+
+**On the duplication.** The same method exists in the PyMOL project
+(`render_esp.py`). Two implementations of one numerical procedure have to agree
+forever, so the self test pins them together: run without arguments,
+`SigmaHoleCalc.py` compares its result on `reference/brombenzol` against the
+value the PyMOL pipeline measures on the same cubes and fails loudly if they
+have drifted apart. Both give +0.01528 a.u. there, and they agree to eight
+decimals on every molecule in `results/`.
+
+---
+
+## 9. Repository layout
 
 ```
 VMD_esp_visualization/
@@ -586,7 +652,8 @@ VMD_esp_visualization/
 │       ├── tp.xyz                (32×37×24, 1.7 MB each)
 │       └── images/               reference images
 ├── tools/
-│   └── make_reference.py         decimated reference set from a full folder
+│   ├── make_reference.py         decimated reference set from a full folder
+│   └── SigmaHoleCalc.py          sigma hole by ray marching, outside the workflow
 ├── results/                      the delivered image set, seven molecules
 │   ├── summary_<time>_<date>.csv       one per run; `_rainbow` for a rainbow run
 │   ├── Pyridine/  Me-Pyr/  CN-Pyr/  NO2-Pyr/   pyridines, provided
