@@ -1,3 +1,0 @@
-molecule,structure,grid,iso_au,shell_points,VS_min_au,VS_max_au,VS_min_kJ,VS_max_kJ,esp_range_used_au,esp_range_mode,colormap,color_scale,opacity,resolution_px,renderer,ambient_occlusion,backgrounds,views
-brombenzol,brombenzol_aro_opti.mol,32x37x24,0.001,313,-0.01863,0.03070,-48.9,80.6,0.0350,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,"pi:transparency, window capture;edge:transparency, window capture;sigma:transparency, window capture"
-# each molecule on its own scale; a comparable set needs --esp-range 0.0350

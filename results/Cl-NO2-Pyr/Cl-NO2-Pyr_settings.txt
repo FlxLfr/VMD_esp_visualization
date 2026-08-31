@@ -19,6 +19,6 @@ Image size        : 1600 x 1061 px
 Renderer          : TachyonInternal
 Projection        : orthoscopic
 View pi           : transparency
-View edge         : transparency
-View sigma        : transparency
-Written           : 2026-08-27 14:56
+View edge         : transparency, window capture
+View sigma        : transparency, window capture
+Written           : 2026-08-31 11:22

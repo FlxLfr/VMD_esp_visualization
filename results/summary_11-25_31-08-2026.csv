@@ -1,0 +1,12 @@
+molecule,structure,grid,iso_au,shell_points,VS_min_au,VS_max_au,VS_min_kJ,VS_max_kJ,esp_range_used_au,esp_range_mode,colormap,color_scale,opacity,resolution_px,renderer,ambient_occlusion,backgrounds,views
+CN-Pyr,S12_CN-Pyr_OPTI.xyz,251x251x251,0.001,14504,-0.05927,0.05025,-155.6,131.9,0.0600,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,pi:transparency;edge:transparency;sigma:transparency
+Cl-NO2-Pyr,S12_Cl-NO2-Pyr_OPTI.xyz,251x251x251,0.001,16330,-0.04545,0.05825,-119.3,152.9,0.0600,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,"pi:transparency;edge:transparency, window capture;sigma:transparency, window capture"
+I-Pyr,S12_I-Pyr_OPTI.xyz,251x251x251,0.001,16840,-0.05638,0.04594,-148.0,120.6,0.0600,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,"pi:transparency;edge:transparency;sigma:transparency, window capture"
+Me-Pyr,S12_Me-Pyr_OPTI.xyz,251x251x251,0.001,14640,-0.06779,0.03647,-178.0,95.8,0.0700,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,"pi:transparency;edge:transparency, window capture;sigma:transparency, window capture"
+NO2-Pyr,S12_NO2-Pyr_OPTI.xyz,251x251x251,0.001,14452,-0.04712,0.04487,-123.7,117.8,0.0500,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,pi:transparency;edge:transparency;sigma:transparency
+Pyridine,S12_Pyridine_OPTI.xyz,251x251x251,0.001,12447,-0.06500,0.03959,-170.7,103.9,0.0700,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,pi:transparency;edge:transparency;sigma:transparency
+brombenzol,brombenzol_aro_opti.mol,251x251x251,0.001,38008,-0.01882,0.03154,-49.4,82.8,0.0350,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,pi:transparency;edge:transparency;sigma:transparency
+chlorbenzol,chlorbenzol_aro_opti.mol,251x251x251,0.001,35592,-0.01896,0.03129,-49.8,82.1,0.0350,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,"pi:transparency;edge:transparency;sigma:transparency, window capture"
+halcion,Halcion.mol,132x101x106,0.001,8145,-0.08429,0.05432,-221.3,142.6,0.0850,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,pi:transparency;edge:transparency;sigma:transparency
+iodbenzol,iodbenzol_aro_opti.mol,251x251x251,0.001,41629,-0.01685,0.03168,-44.2,83.2,0.0350,auto,redblue,RWB,0.5,1600x1061,TachyonInternal,off,white,pi:transparency;edge:transparency;sigma:transparency
+# each molecule on its own scale; a comparable set needs --esp-range 0.0850
