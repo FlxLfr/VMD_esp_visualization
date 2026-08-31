@@ -237,7 +237,7 @@ def ensure_cubes(entry, args):
 FIELDS = ["molecule", "structure", "grid", "iso_au", "shell_points",
           "VS_min_au", "VS_max_au", "VS_min_kJ", "VS_max_kJ",
           "esp_range_used_au", "esp_range_mode", "colormap", "color_scale",
-          "opacity", "resolution_px", "renderer", "ambient_occlusion",
+          "opacity", "resolution_px", "renderer",
           "backgrounds", "views"]
 
 
@@ -293,7 +293,6 @@ def write_summary(path, rows, common=None, advice=None):
                 "resolution_px": (f"{r['size'][0]}x{r['size'][1]}"
                                   if r.get("size") else ""),
                 "renderer": r.get("renderer", ""),
-                "ambient_occlusion": "on" if r["ao"] else "off",
                 "backgrounds": " ".join(r["backgrounds"]),
                 # Per view, what it was actually produced with - on a Tachyon
                 # crash the fallback kicks in, and that must not disappear
@@ -433,11 +432,6 @@ def main(argv=None):
                    help="only convert and write esp.tcl")
     g.add_argument("--vmd", help="path to vmd.exe, if it is not on the PATH")
     g.add_argument("--res", default="1600x1280", help="image size")
-    g.add_argument("--ao", action="store_true",
-                   help="ambient occlusion on. Off by default: it lays soft "
-                        "shadows into the hollows, but also lines the sticks "
-                        "as grey doubles on the isosurface. PyMOL renders "
-                        "without it too.")
     g.add_argument("--backgrounds", nargs="+", default=["white"],
                    metavar="COLOUR",
                    help="background colours, e.g. white black. From two "
@@ -596,7 +590,7 @@ def main(argv=None):
                "stats": e["stats"], "rng": rng, "iso": args.iso, "mode": mode,
                "colormap": "rainbow" if args.rainbow else "redblue",
                "color_scale": color_scale, "opacity": args.opacity,
-               "ao": args.ao, "backgrounds": args.backgrounds,
+               "backgrounds": args.backgrounds,
                "made": {}, "size": None, "renderer": ""}
 
         if not args.no_render:
@@ -608,7 +602,7 @@ def main(argv=None):
                 res = rend.render_all(
                     outdir=args.images_dir, prefix=name, iso=args.iso,
                     rng=rng, stats=e["stats"], vmd=args.vmd, res=args.res,
-                    ao=args.ao, backgrounds=args.backgrounds,
+                    backgrounds=args.backgrounds,
                     scene=scene_name, rainbow=args.rainbow,
                     keep_tga=args.keep_tga, dpi=args.dpi, verbose=True)
             finally:

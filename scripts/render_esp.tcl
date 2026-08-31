@@ -11,7 +11,6 @@
 # Can be set beforehand (in the Tk Console, then "source"):
 #   set ESP_RES    {1600 1280}   window size = image size
 #   set ESP_QUIT   0             leave VMD open after rendering
-#   set ESP_AO     0             ambient occlusion off
 #   set ESP_OPAQUE 1             render the isosurface opaque
 #   set ESP_BG     black          background colour
 #   set ESP_VIEWS  {sigma}       single views only
@@ -23,7 +22,6 @@
 
 if {![info exists ESP_RES]}    { set ESP_RES {1600 1280} }
 if {![info exists ESP_QUIT]}   { set ESP_QUIT 1 }
-if {![info exists ESP_AO]}     { set ESP_AO 1 }
 if {![info exists ESP_OPAQUE]}  { set ESP_OPAQUE 0 }
 if {![info exists ESP_BG]}     { set ESP_BG white }
 # Appended to the file name - with several background colours in one run it
@@ -56,27 +54,24 @@ source $ESP_SCENE
 if {$ESP_OPAQUE} { esp_opacity 1.0 }
 
 # --- Render quality -------------------------------------------
-# These settings barely show in the OpenGL window and show strongly in the ray
-# tracer. Ambient occlusion above all: it lays soft shadows into the hollows
-# between the CH bulges and is the largest single step from "preview" to
-# "publication figure".
-# Ambient occlusion casts no object-shaped patches, it only darkens hollows -
-# which is why it can be switched on.
+# Drop shadows stay off, without an option. They cast the licorice sticks onto
+# the isosurface as grey capsules: in the pi image an offset double sits behind
+# every stick, in the axial view a stick shadow lies in the middle of the
+# sphere. Both look like an artefact of the data and are none, and the PyMOL
+# pipeline sets ray_shadows 0 for the same reason - which is what keeps the two
+# image sets comparable.
 #
-# Drop shadows, in contrast, stay off for good, without an option. They cast
-# the licorice sticks onto the isosurface as grey capsules: in the pi image an
-# offset double sits behind every stick, in the axial view a stick shadow lies
-# in the middle of the sphere. Both look like an artefact of the data and are
-# none, and PyMOL renders without them too - which keeps the images
-# comparable. Anyone who does want to see them switches them on in the Tk
-# Console: 'display shadows on', then 'esp_snapshot <name>'.
+# Ambient occlusion is off as well, and there is no switch for it either. It
+# darkens the hollows between the CH bulges, which does look richer, but it
+# also lines the sticks with grey doubles on the isosurface, it has no
+# counterpart in the PyMOL pipeline, and combined with many transparent layers
+# it was the most reliable way to make Tachyon abort in the axial view.
+# Anyone who wants to see either effect switches it on in the Tk Console:
+# 'display shadows on' or 'display ambientocclusion on', then
+# 'esp_snapshot <name>'.
 _try display shadows off
+_try display ambientocclusion off
 _try color Display Background $ESP_BG
-if {$ESP_AO} {
-    _try display ambientocclusion on
-    _try display aoambient 0.80
-    _try display aodirect 0.40
-}
 _try display antialias on
 _try display depthcue off
 _try display resize [lindex $ESP_RES 0] [lindex $ESP_RES 1]

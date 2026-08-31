@@ -67,7 +67,7 @@ def find_vmd(explicit=None):
     return None
 
 
-def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
+def run_vmd(vmd, outdir, prefix, views, w, h, opaque, label,
             snapshot=0, scene="esp.tcl", bg="white", suffix="",
             verbose=True):
     """One VMD run for the given views. Returns (rc, renderer).
@@ -82,7 +82,6 @@ def run_vmd(vmd, outdir, prefix, views, w, h, ao, opaque, label,
     with open("_render_opts.tcl", "w", encoding="utf-8") as fh:
         fh.write(f"set ESP_RES {{{w} {h}}}\n"
                  f"set ESP_QUIT 1\n"
-                 f"set ESP_AO {ao}\n"
                  "set ESP_BG {" + bg + "}\n"
                  "set ESP_SUFFIX {" + suffix + "}\n"
                  f"set ESP_OPAQUE {opaque}\n"
@@ -207,7 +206,7 @@ def colorbar(path, rng, dpi=300, rainbow=False):
 
 
 def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
-             ao=False, rainbow=False, backgrounds=("white",)):
+             rainbow=False, backgrounds=("white",)):
     lines = [
         "Render parameters (written by render_espVMD.py)",
         "=" * 55,
@@ -238,7 +237,6 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
          f"blue positive)" if rainbow else
          f"Colour ramp       : RWB (red negative, white zero, blue positive)"),
         f"Background        : {', '.join(backgrounds)}",
-        f"Ambient occl.     : {'on' if ao else 'off'}",
         f"Image size        : {size[0]} x {size[1]} px" if size
         else "Image size        : unknown",
         f"Renderer          : {renderer}",
@@ -257,7 +255,7 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
 
 
 def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
-               vmd=None, res="1600x1280", ao=False, backgrounds=None,
+               vmd=None, res="1600x1280", backgrounds=None,
                keep_tga=False, dpi=300, no_vmd=False, scene=None,
                rainbow=False, verbose=True):
     """Image set for the CURRENT directory. Expects the scene and the cubes.
@@ -281,21 +279,15 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     stats = stats if stats is not None else scene_stats
     renderer = "TachyonInternal"
 
-    # Ambient occlusion is OFF by default, see --ao. If it stays on, it is
-    # the first pass.
-    #
-    # In the axial view Tachyon likes to die on the combination of many
-    # transparent layers and ambient occlusion. Rather than turning everything
-    # down at once: full quality first, then only the missing views with less.
-    # What was produced by what is recorded in settings.txt.
-    passes = ([("AO + transparency", dict(ao=1, opaque=0, snapshot=0))]
-              if ao else []) + [
-        ("transparency", dict(ao=0, opaque=0, snapshot=0)),
+    # Full quality first, then only the missing views with less. What was
+    # produced by what is recorded in settings.txt.
+    passes = [
+        ("transparency", dict(opaque=0, snapshot=0)),
         # Tachyon bails out in the axial view on the many transparent layers
         # crossed. The window capture knows no recursion and keeps the
         # transparency - only after that, opaque.
-        ("transparency, window capture", dict(ao=0, opaque=0, snapshot=1)),
-        ("opaque", dict(ao=0, opaque=1, snapshot=0))]
+        ("transparency, window capture", dict(opaque=0, snapshot=1)),
+        ("opaque", dict(opaque=1, snapshot=0))]
 
     # Every background colour is an image set of its own with its own retry
     # logic: that Tachyon gets through on white says nothing about whether it
@@ -334,7 +326,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                 # counted as a success.
                 t0 = time.time() - 1.0
                 rc, used = run_vmd(vmd, outdir, out_prefix, todo, w, h,
-                                       opt["ao"], opt["opaque"], label,
+                                       opt["opaque"], label,
                                        snapshot=opt["snapshot"], scene=scene,
                                        bg=bg, suffix=tag[bg], verbose=verbose)
                 # The renderer of the FIRST pass is what the log records;
@@ -378,7 +370,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     st = os.path.join(outdir, f"{out_prefix}_settings.txt")
     size = done[0][1] if done else None
     settings(st, prefix, iso, rng, stats, size, renderer, made,
-             ao=ao, rainbow=rainbow, backgrounds=backgrounds)
+             rainbow=rainbow, backgrounds=backgrounds)
     if verbose:
         print(f"[4] -> {st}")
 
@@ -394,11 +386,6 @@ def main(argv=None):
                    help="do not call VMD, only convert TGA and build the bar")
     p.add_argument("--vmd", help="path to vmd.exe, if it is not on the PATH")
     p.add_argument("--res", default="1600x1280", help="image size (window)")
-    p.add_argument("--ao", action="store_true",
-                   help="ambient occlusion on. Off by default: it lays soft "
-                        "shadows into the hollows, but also lines the sticks "
-                        "as grey doubles on the isosurface. PyMOL renders "
-                        "without it too.")
     p.add_argument("--backgrounds", nargs="+", default=["white"],
                    metavar="COLOUR",
                    help="background colours, e.g. white black. From two "
@@ -433,7 +420,7 @@ def main(argv=None):
                  f"    python {conv} --struct <structure> td.xyz tp.xyz")
 
     render_all(outdir=args.outdir, vmd=args.vmd, res=args.res,
-               ao=args.ao, backgrounds=args.backgrounds, scene=args.scene,
+               backgrounds=args.backgrounds, scene=args.scene,
                rainbow=args.rainbow,
                keep_tga=args.keep_tga, dpi=args.dpi, no_vmd=args.no_vmd)
     return 0

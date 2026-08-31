@@ -332,7 +332,6 @@ principal axis instead; read the file name as "axial view" in that case.
 | `--scene` | `esp.tcl` (`esp_rainbow.tcl` with `--rainbow`) | scene file to render; the smoke test uses `esp_check.tcl` |
 | `--rainbow` | off | render the rainbow scene into a separate `<prefix>_rainbow_*` set |
 | `--res` | `1600x1280` | image size in px |
-| `--ao` | off | ambient occlusion: soft shadows in the recesses, slower |
 | `--backgrounds` | `white` | one or more background colours, e.g. `--backgrounds white black` renders each view once per colour |
 | `--keep-tga` | off | keep VMD's intermediate TGA files |
 | `--dpi` | `300` | resolution of the colour bar |
@@ -346,7 +345,7 @@ principal axis instead; read the file name as "axial view" in that case.
 python ../../scripts/render_espVMD.py
 
 # full resolution, deeper shading
-python ../../scripts/render_espVMD.py --res 2400x1920 --ao
+python ../../scripts/render_espVMD.py --res 2400x1920
 
 # second image set with the rainbow ramp, standard set kept
 python ../../scripts/render_espVMD.py --rainbow
@@ -430,7 +429,7 @@ files, so no rendering is needed to find them.
 | `--no-render` | off | convert and write the scene only |
 | `--res` | `1600x1280` | passed through |
 | `--backgrounds` | `white` | one or more background colours, passed through |
-| `--ao`, `--keep-tga`, `--dpi`, `--vmd` | | passed through |
+| `--keep-tga`, `--dpi`, `--vmd` | | passed through |
 | `--images-dir` | `images` (`images_check` for the built-in reference run) | output folder inside each molecule folder |
 | `--summary` | `<root>/summary_HH-MM_DD-MM-YYYY.csv` | path of the CSV summary. The time stamp keeps a later run from overwriting an earlier one, two runs on the same day included; `--rainbow` adds `_rainbow`, the smoke test `_check`. |
 
@@ -508,7 +507,6 @@ each other:
 | `color_scale` | the VMD scale underneath the ramp: `RWB`, or `RGB` with `--rainbow` |
 | `opacity` | surface opacity used |
 | `resolution_px`, `renderer` | image size and the renderer of the first pass |
-| `ambient_occlusion` | whether ambient occlusion was on |
 | `backgrounds` | the background colours rendered |
 | `views` | per view, which pass produced it, e.g. `pi:transparency;edge:transparency, window capture` |
 
