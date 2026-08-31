@@ -549,6 +549,8 @@ nothing else; locating the σ-hole is a separate analysis. It therefore lives in
 cd tools
 python SigmaHoleCalc.py --folder ../results/brombenzol
 ```
+For the full information about the script, consult in /Scripts/Readme.me
+
 
 ## 9. Repository layout
 
@@ -574,6 +576,7 @@ VMD_esp_visualization/
 ├── tools/
 │   ├── make_reference.py         decimated reference set from a full folder
 │   └── SigmaHoleCalc.py          sigma hole by ray marching, outside the workflow
+│   └── README.md                 Information about the Reference creation script and the Sigma-Hole calculation script 
 ├── results/                      the delivered image set, seven molecules
 │   ├── summary_<time>_<date>.csv       one per run; `_rainbow` for a rainbow run
 │   ├── Pyridine/  Me-Pyr/  CN-Pyr/  NO2-Pyr/   pyridines, provided
