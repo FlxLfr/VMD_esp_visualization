@@ -7,15 +7,6 @@ This repository is the continuation of
 It is a **visualisation tool only**: it turns Turbomole `pointval` output into
 the same standard set of ESP figures, drawn in VMD instead of PyMOL.
 
-> **The σ-hole potential is computed exclusively in the PyMOL project, not here.** Finding
-> the σ-hole maximum needs trilinear interpolation along the C–X axis, and that
-> code is written, parameter-studied and documented over there. V_S,min and V_S,max are computed here too, from the
-> grid points in the ρ = iso ± 12 % band, using the same constants as the sister
-> project: same code path, same numbers, which is what the smoke test in §1.3
-> verifies. Without them there would be no colour scale and therefore no
-> meaningful picture. The full list of what the sister project does and this one
-> does not, together with a side-by-side comparison of the images and the
-> surface numbers, is in `docs/ComparisonVMDPyMolOutput.docx`.
 
 | Aspect | Details |
 |---|---|
