@@ -115,8 +115,7 @@ expect:
 
 **These are the same numbers the PyMOL pipeline reports.** Both reference sets
 are built from the same bromobenzene data with the same parameters, and both
-derive V_S from grid points near the ρ = 0.001 shell. That is the point of the
-test: it cross-checks the two pipelines, not just this one. If your numbers
+derive V_S from grid points near the ρ = 0.001 shell. If your numbers
 match, the installation is sound and any remaining difference between the two
 image sets is the viewer, not the data.
 
@@ -133,7 +132,7 @@ Per molecule, in one folder:
 |---|---|---|
 | `td.xyz` | Turbomole `pointval` **total density** grid | Bohr |
 | `tp.xyz` | Turbomole `pointval` **total potential** (ESP) grid | Bohr |
-| `*.mol` / `*.sdf` / `*.xyz` | molecular structure | Å (default) |
+| `*.mol` / `*.sdf` / `*.xyz` | molecular structure | Å (default, change with `--struct-unit` if the structure file comes in Bohr) |
 
 **`td.xyz` and `tp.xyz` are not structure files** despite the extension. They are
 ASCII point clouds with one line per grid point, carrying the full coordinates
@@ -164,8 +163,7 @@ definition, so the option is ignored for them.
 pipeline, nothing downstream reads it again: `xyzToCubeToVMDVis.py` writes the
 atom positions into the cube header, and VMD then takes geometry *and* grid from
 that one file. There is no second source of coordinates that could disagree with
-the grid, so the classic "molecule floats next to its own surface" failure mode
-does not exist here.
+the grid.
 
 ---
 
@@ -341,9 +339,6 @@ python ../../scripts/render_espVMD.py --res 2400x1920
 # second image set with the rainbow ramp, standard set kept
 python ../../scripts/render_espVMD.py --rainbow
 
-# only rebuild the colour bar, do not touch VMD
-python ../../scripts/render_espVMD.py --no-vmd
-
 # VMD not on the PATH
 python ../../scripts/render_espVMD.py --vmd "C:\Program Files\VMD\vmd.exe"
 ```
@@ -352,9 +347,7 @@ python ../../scripts/render_espVMD.py --vmd "C:\Program Files\VMD\vmd.exe"
 the axial view, where the line of sight crosses many transparent layers. The
 script then re-renders the missing views as an OpenGL window capture, which keeps
 the transparency, and only failing that as an opaque surface. Which pass produced
-which view is written into `*_settings.txt` and the summary CSV. The window capture
-copies the OpenGL buffer, so the VMD window must be on screen and not covered
-while it runs.
+which view is written into `*_settings.txt` and the summary CSV.
 
 **The colour bar comes from matplotlib, not from VMD.** VMD has no legend object,
 and neither has PyMOL, so both pipelines draw it the same way, as a separate PNG.
@@ -394,7 +387,7 @@ cd scripts
 python run_allVMD.py --root ../sandbox
 ```
 
-This converts what needs converting, writes an `esp.tcl` next to each molecule's
+This converts what needs converting (.xyz -> .cube), writes an `esp.tcl` next to each molecule's
 cube files, renders every molecule and collects a dated `summary_<time>_<date>.csv` at the root. Called
 **without arguments** it runs on `reference/` instead, conducting the smoke test from §1.3.
 If you are too lazy for the --root option, just use the `reference/` folder as your sandbox
@@ -411,7 +404,7 @@ files, so no rendering is needed to find them.
 | `--stride N` | `1` | grid decimation **during conversion**. Ignored when the cube files already exist, use `--force-convert` to rebuild them. |
 | `--struct-unit {angstrom,bohr}` | `angstrom` | as in the converter; `.xyz` only |
 | `--force-convert` | off | rewrite cube files even if they already exist |
-| `--esp-range` | `auto` | `auto` (each molecule on its own scale), a fixed value in a.u., or `common` (one scale for all, straight from this run) |
+| `--esp-range` | `auto` | `auto`: each molecule on its own scale with a fixed value in a.u., or `common` (one scale for all, straight from this run) |
 | `--iso` | `0.001` | density isovalue, passed through |
 | `--opacity` | `0.50` | passed through |
 | `--scale`, `--fill` | `auto`, `0.85` | zoom, passed through |
@@ -431,23 +424,18 @@ files, so no rendering is needed to find them.
 python run_allVMD.py --root ../sandbox
 
 # the second run, with the scale the first one recommended
-python run_allVMD.py --root ../sandbox --esp-range 0.0700
+python run_allVMD.py --root ../sandbox --esp-range 0.0XXX
 
 # pick individual molecules out of a larger root
 python run_allVMD.py --root ../sandbox --only Pyridine Me-Pyr
 python run_allVMD.py --root ../sandbox --only "*benzol"
 
-# match the PyMOL figures exactly: take the value from their summary CSV
-python run_allVMD.py --root ../sandbox --esp-range 0.035
-
 # second image set with the rainbow ramp, standard set kept
-python run_allVMD.py --root ../sandbox --rainbow --esp-range 0.0700
+python run_allVMD.py --root ../sandbox --rainbow
 
 # convert and write the scenes, render later
 python run_allVMD.py --root ../sandbox --no-render
 
-# installation check on the reference data
-python run_allVMD.py
 ```
 
 > **Do not put a common colour scale across data of different provenance.** One
@@ -501,10 +489,6 @@ each other:
 | `backgrounds` | the background colours rendered |
 | `views` | per view, which pass produced it, e.g. `pi:transparency;edge:transparency, window capture` |
 
-Whatever colour range you choose, **state it in the figure caption** and ship
-`*_colorbar.png` with the figures. An ESP figure without its scale is
-uninterpretable.
-
 ---
 
 ## 6. Console output
@@ -550,8 +534,7 @@ file from a SMILES string:
 Pymol_esp_visualization/tools/CreateTpTdFromSmiles.py
 ```
 
-Its output is good enough to exercise the pipeline end to end and nothing more.
-Do not read numbers off it. Running it needs a separate environment; see
+Its output is good enough to exercise the pipeline end to end and nothing more. Running it needs a separate environment; see
 `tools/environment-testdata.yml` and `tools/README.txt` in that repository.
 
 ---
@@ -560,64 +543,12 @@ Do not read numbers off it. Running it needs a separate environment; see
 
 The rendering pipeline needs V_S,min and V_S,max for the colour scale and
 nothing else; locating the σ-hole is a separate analysis. It therefore lives in
-`tools/` and **`run_allVMD.py` does not call it** — a broken σ-hole can never
-cost you an image set.
+`tools/` and **`run_allVMD.py` does not call it** 
 
 ```bash
 cd tools
 python SigmaHoleCalc.py --folder ../results/brombenzol
 ```
-
-It reads the finished `td.cube` and `tp.cube`. The atom block sits in the cube
-header, so no structure file is needed and no alignment question arises. Run it
-without `--folder` and it works on `reference/brombenzol` as a self test.
-
-**Why rays instead of grid points.** The σ-hole is a peak *on* the C–X axis.
-Whether a grid point happens to sit there *and* inside the thin ρ = iso shell
-at the same time is luck. So 400 rays are cast from the halogen into a cone
-around the axis; on each one the radius at which ρ crosses the isovalue is
-found and V read off there, both by trilinear interpolation. Both numbers are
-printed, so the difference stays visible:
-
-```
-  Cl21
-    sigma hole  = +0.01709 a.u. =   +44.9 kJ/(mol*e) =  +10.7 kcal/(mol*e)   [interpolated, 3.8 degrees off the C-Cl axis]
-    grid points = +0.02675 a.u. =   +70.2 kJ/(mol*e) =  +16.8 kcal/(mol*e)   [point-based, 117 points in the cap]
-    belt        = -0.01836 a.u. =   -48.2 kJ/(mol*e) =  -11.5 kcal/(mol*e)   [508 points]
-```
-
-The bracket is the same one `render_esp.py` prints in the PyMOL project, so the
-two consoles can be read side by side. The ray count is appended only when rays
-were lost — "400 of 400" every time is noise, a shortfall is not.
-
-**Read the angle.** It is the quality control. `0.0 degrees` means the maximum
-sits on the axis — the normal case. A value at the rim of the cone (≈36.9° at
-the default `--cone`) means there is no maximum inside the cone at all;
-fluorine reports that reliably, because it has no σ-hole.
-
-Molecules with several halogens are measured one by one and reported strongest
-first. A molecule without a halogen says so and stops.
-
-### Options
-
-| Option | Default | Effect |
-|---|---|---|
-| `--folder` | `reference/brombenzol` (self test) | molecule folder with `td.cube` and `tp.cube` |
-| `--iso` | `0.001` | isovalue the σ-hole is read on. **Changes the measured value.** |
-| `--rays` | `400` | rays per halogen |
-| `--cone` | `0.80` | cosine of the cone half-angle, i.e. 36.9° |
-| `--step` | `0.02` | step along a ray in Bohr |
-| `--csv [PATH]` | off | also write the result as CSV. Bare `--csv` writes `sigma_holes_<molecule>.csv` next to the cube files. |
-
-**On the duplication.** The same method exists in the PyMOL project
-(`render_esp.py`). Two implementations of one numerical procedure have to agree
-forever, so the self test pins them together: run without arguments,
-`SigmaHoleCalc.py` compares its result on `reference/brombenzol` against the
-value the PyMOL pipeline measures on the same cubes and fails loudly if they
-have drifted apart. Both give +0.01528 a.u. there, and they agree to eight
-decimals on every molecule in `results/`.
-
----
 
 ## 9. Repository layout
 
