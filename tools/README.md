@@ -6,7 +6,7 @@ Two scripts that sit **outside** the rendering workflow. Neither is called by
 | Script | Purpose | Documented in |
 |---|---|---|
 | `make_reference.py` | builds the committed reference dataset under `reference/` | this file |
-| `SigmaHoleCalc.py` | σ-hole per halogen, by ray marching on finished cube files | §8 of the repository `README.md` |
+| `SigmaHoleCalc.py` | σ-hole per halogen, by ray marching on finished cube files | §4 of this file |
 
 ---
 
@@ -145,3 +145,99 @@ follow:
 The same reference molecule exists in the sister PyMOL project. Keeping the two
 identical is what makes the cross-pipeline comparison meaningful, so rebuild
 both or neither.
+
+---
+
+## 4  `SigmaHoleCalc.py`
+
+Locates the σ-hole of every halogen from a finished pair of cube files.
+
+```bash
+cd tools
+python SigmaHoleCalc.py --folder ../results/brombenzol
+```
+
+It reads `td.cube` and `tp.cube`. The atom block sits in the cube header, so no
+structure file is needed and the alignment question of the converter document
+does not arise. Run without `--folder` and it works on `reference/brombenzol`
+as a self test (§1).
+
+### Why rays instead of grid points
+
+The σ-hole is a peak *on* the C–X axis. Whether a grid point happens to sit
+there *and* inside the thin ρ = iso shell at the same time is luck. So 400 rays
+are cast from the halogen into a cone around the axis; on each one the radius at
+which ρ crosses the isovalue is located and V read off there, both by trilinear
+interpolation. Both numbers are printed, so the difference stays visible:
+
+```
+  Cl21
+    sigma hole  = +0.01709 a.u. =   +44.9 kJ/(mol*e) =  +10.7 kcal/(mol*e)   [interpolated, 3.8 degrees off the C-Cl axis]
+    grid points = +0.02675 a.u. =   +70.2 kJ/(mol*e) =  +16.8 kcal/(mol*e)   [point-based, 117 points in the cap]
+    belt        = -0.01836 a.u. =   -48.2 kJ/(mol*e) =  -11.5 kcal/(mol*e)   [508 points]
+```
+
+The bracket is the same one `render_esp.py` prints in the PyMOL project, so the
+two consoles can be read side by side. The ray count is appended only when rays
+were lost — "400 of 400" every time is noise, a shortfall is not.
+
+**Read the angle.** It is the quality control. `0.0 degrees` means the maximum
+sits on the axis, the normal case. A value at the rim of the cone (≈36.9° at the
+default `--cone`) means there is no maximum inside the cone at all; fluorine
+reports that reliably, because it has no σ-hole.
+
+Molecules with several halogens are measured one by one and reported strongest
+first. A molecule without a halogen says so and stops.
+
+### Options
+
+| Option | Default | Effect |
+|---|---|---|
+| `--folder` | `reference/brombenzol` (self test) | molecule folder with `td.cube` and `tp.cube` |
+| `--iso` | `0.001` | **isovalue the σ-hole is read on — changes the measured value.** See below. |
+| `--rays` | `400` | rays per halogen |
+| `--cone` | `0.80` | cosine of the cone half-angle, i.e. 36.9° |
+| `--step` | `0.02` | step along a ray in Bohr |
+| `--csv [PATH]` | off | also write the result as CSV. Bare `--csv` writes `sigma_holes_<molecule>.csv` next to the cube files. |
+
+### `--iso`: reproducing values computed on another surface
+
+ρ = 0.001 a.u. is the Politzer/Murray convention and the default here, but it is
+a convention, not a constant of nature. Part of the literature reports σ-holes on
+ρ = 0.002 a.u., and those numbers are not comparable with 0.001 values — the
+isovalue is the single parameter that moves the result most. Bromobenzene on the
+same 251³ grid:
+
+| `--iso` | σ-hole | |
+|---|---|---|
+| 0.0005 | +0.0098 a.u. | +6.2 kcal/(mol·e) |
+| **0.0010** | **+0.01629** | **+10.2**  ← default, Politzer/Murray |
+| 0.0020 | +0.02652 | +16.6 |
+| 0.0040 | +0.0434 | +27.2 |
+
+A factor of 4.4 across that range. A larger isovalue puts the surface closer to
+the nuclei, where less of the positive nuclear contribution has been screened by
+the electrons.
+
+```bash
+python SigmaHoleCalc.py --folder ../sandbox/brombenzol --iso 0.002
+```
+
+`--iso` exists to reproduce someone else's choice, not to improve on 0.001. Every
+value the script prints carries its isovalue in the header line, and the CSV
+records it in the `iso_au` column, so a number can always be traced back to the
+surface it was measured on.
+
+> The same applies in the PyMOL pipeline, where `--iso` additionally moves the
+> surface that is drawn. Here nothing is rendered, so `--iso` affects the
+> measurement only.
+
+### On the duplication
+
+The same method exists in the PyMOL project (`render_esp.py`). Two
+implementations of one numerical procedure have to agree forever, so the self
+test pins them together: run without arguments, `SigmaHoleCalc.py` compares its
+result on `reference/brombenzol` against the value the PyMOL pipeline measures on
+the same cubes and fails loudly if they have drifted apart. Both give
++0.01528 a.u. there, and they agree to eight decimals on every molecule in
+`results/`.

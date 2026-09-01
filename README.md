@@ -549,7 +549,11 @@ nothing else; locating the σ-hole is a separate analysis. It therefore lives in
 cd tools
 python SigmaHoleCalc.py --folder ../results/brombenzol
 ```
-For the full documentation of this script and of `make_reference.py`, see `tools/README.md`.
+The σ-hole is read on the ρ = 0.001 a.u. surface by default; `--iso` moves it,
+which is what you need to reproduce values published on another isosurface.
+
+For the options, the method and the reasoning — and for `make_reference.py` —
+see [`tools/README.md`](tools/README.md).
 
 
 ## 9. Repository layout
