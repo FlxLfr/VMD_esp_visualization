@@ -34,6 +34,11 @@ import time
 import datetime
 
 VIEWS = ("pi", "edge", "sigma")
+# What render_esp.tcl renders with. Hard-wired there and not selectable: it is
+# the only ray tracer that exports the colour-scale texture, see the note over
+# there. Kept here as a name so that settings.txt says something sensible
+# before VMD has reported back what it actually used.
+DEFAULT_RENDERER = "TachyonInternal"
 STATS_RE = re.compile(r"V_S,min=(\S+)\s+V_S,max=(\S+)\s+range=(\S+)\s+iso=(\S+)")
 HARTREE_TO_KJ = 2625.4996
 
@@ -100,7 +105,7 @@ def run_vmd(vmd, outdir, prefix, views, w, h, opaque, label,
                  # Braces: Tcl substitutes nothing inside them, and spaces in
                  # the path ("2. Semester") do no harm.
                  "source {" + tcl + "}\n")
-    renderer = "TachyonInternal"
+    used_renderer = DEFAULT_RENDERER
     try:
         out = subprocess.run([vmd, "-e", "_render_opts.tcl"],
                              capture_output=True, text=True, timeout=1800)
@@ -115,8 +120,15 @@ def run_vmd(vmd, outdir, prefix, views, w, h, opaque, label,
                 if verbose or line.startswith("!"):
                     print("   ", line)
                 if line.startswith("Renderer:"):
-                    renderer = line.split(":", 1)[1].strip()
-        return out.returncode, renderer
+                    used_renderer = line.split(":", 1)[1].strip()
+        if "Texture mapping not exported" in text:
+            print(f"    ! {used_renderer} does not export the colour scale "
+                  f"(VMD draws it as a texture) - the surfaces come out "
+                  f"colourless.\n"
+                  f"      This VMD build renders the scene differently than "
+                  f"the pipeline expects; the images are not usable.",
+                  file=sys.stderr)
+        return out.returncode, used_renderer
     except subprocess.TimeoutExpired:
         sys.exit("VMD did not respond within 30 minutes.")
     finally:
@@ -277,7 +289,8 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                                        else (scene_stats[2] if scene_stats
                                              else 0.035))
     stats = stats if stats is not None else scene_stats
-    renderer = "TachyonInternal"
+    # What VMD actually used - run_vmd reads it back out of VMD's own output.
+    used_renderer = DEFAULT_RENDERER
 
     # Full quality first, then only the missing views with less. What was
     # produced by what is recorded in settings.txt.
@@ -333,7 +346,7 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                 # what a caught-up view was produced with is told by its own
                 # line.
                 if bg == backgrounds[0] and label == passes[0][0]:
-                    renderer = used
+                    used_renderer = used
                 for v in todo:
                     tga = os.path.join(outdir,
                                        f"{out_prefix}_{v}{tag[bg]}.tga")
@@ -369,12 +382,13 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
 
     st = os.path.join(outdir, f"{out_prefix}_settings.txt")
     size = done[0][1] if done else None
-    settings(st, prefix, iso, rng, stats, size, renderer, made,
+    settings(st, prefix, iso, rng, stats, size, used_renderer, made,
              rainbow=rainbow, backgrounds=backgrounds)
     if verbose:
         print(f"[4] -> {st}")
 
-    return {"prefix": prefix, "made": made, "renderer": renderer, "size": size,
+    return {"prefix": prefix, "made": made, "renderer": used_renderer,
+            "size": size,
             "rng": rng, "iso": iso, "stats": stats, "outdir": outdir,
             "images": [p for p, _ in done], "colorbar": cb, "settings": st}
 

@@ -89,14 +89,30 @@ puts "Window: [display get size]" ; flush stdout
 # Careful: the capture copies the screen contents, so the VMD window must not
 # be covered.
 #
-# Otherwise: on the GPU the OptiX path renders the same scene faster. Not
-# every build has it.
+# The renderer is hard-wired, and the fastest one available is deliberately
+# not the one used. There is no option for it - see below.
+#
+# VMD does not colour a "mol color Volume" isosurface vertex by vertex, it
+# lays the 1024 entries of the colour scale onto the surface as a 1D TEXTURE.
+# A renderer that does not export textures therefore draws the surface in the
+# plain material colour - white, in this scene. TachyonLOptiXInternal is such
+# a renderer. VMD offers it on every machine with an NVIDIA card, it is a few
+# tenths of a second faster over three images, and it says so itself while it
+# happens:
+#
+#     Warning) Texture mapping not exported for this renderer
+#     Warning) Unimplemented features may negatively affect the appearance
+#
+# The images are then geometrically correct and completely colourless - the
+# one thing the whole pipeline is about is missing. This used to be selected
+# automatically from what the machine offered, which made the picture depend
+# on the graphics card of whoever ran the pipeline; on an NVIDIA box the whole
+# image set came out white. TachyonInternal is in every VMD build, needs no
+# GPU and takes about a second per image here, so there is nothing to gain
+# from making this selectable - a second renderer could only reintroduce the
+# same bug.
 set RENDERER TachyonInternal
-if {$ESP_SNAPSHOT} {
-    set RENDERER snapshot
-} elseif {[lsearch [render list] TachyonLOptiXInternal] >= 0} {
-    set RENDERER TachyonLOptiXInternal
-}
+if {$ESP_SNAPSHOT} { set RENDERER snapshot }
 puts "Renderer: $RENDERER" ; flush stdout
 
 # --- Render ---------------------------------------------------
