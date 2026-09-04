@@ -86,6 +86,30 @@ DEFAULT_ROOT = os.path.normpath(os.path.join(_HERE, "..", "reference"))
 # Finding molecule folders
 # ----------------------------------------------------------------------------
 
+def discover(root):
+    """All molecule folders below ``root``, sorted by name."""
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in ("images", "images_check", "__pycache__",
+                                    ".git", "_to_delete")]
+        names = set(filenames)
+        has_raw = {"td.xyz", "tp.xyz"} <= names
+        has_cubes = {"td.cube", "tp.cube"} <= names
+        if not (has_raw or has_cubes):
+            continue
+        struct = find_structure(dirpath,
+                                exclude=[os.path.join(dirpath, "td.xyz"),
+                                         os.path.join(dirpath, "tp.xyz")])
+        if struct is None and not has_cubes:
+            print(f"  ! {dirpath}: grids found, but no structure file "
+                  f"({'/'.join(STRUCT_EXT)}) - skipped")
+            continue
+        found.append({"dir": dirpath, "struct": struct,
+                      "has_raw": has_raw, "has_cubes": has_cubes})
+    return sorted(found, key=lambda e: e["dir"])
+
+
 def find_structure(folder, exclude):
     """The structure file in ``folder``, or None if there is none.
 
@@ -133,30 +157,6 @@ def find_structure(folder, exclude):
             if e == ext:
                 return path
     return found[0][2]
-
-
-def discover(root):
-    """All molecule folders below ``root``, sorted by name."""
-    found = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames
-                       if d not in ("images", "images_check", "__pycache__",
-                                    ".git", "_to_delete")]
-        names = set(filenames)
-        has_raw = {"td.xyz", "tp.xyz"} <= names
-        has_cubes = {"td.cube", "tp.cube"} <= names
-        if not (has_raw or has_cubes):
-            continue
-        struct = find_structure(dirpath,
-                                exclude=[os.path.join(dirpath, "td.xyz"),
-                                         os.path.join(dirpath, "tp.xyz")])
-        if struct is None and not has_cubes:
-            print(f"  ! {dirpath}: grids found, but no structure file "
-                  f"({'/'.join(STRUCT_EXT)}) - skipped")
-            continue
-        found.append({"dir": dirpath, "struct": struct,
-                      "has_raw": has_raw, "has_cubes": has_cubes})
-    return sorted(found, key=lambda e: e["dir"])
 
 
 def cube_dims(path):
