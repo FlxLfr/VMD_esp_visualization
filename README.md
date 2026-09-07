@@ -60,7 +60,6 @@ VMD is not a conda package and the Windows installer does **not** put it on the
 `PATH`. The scripts find it anyway: they check the `PATH`, then the `VMDDIR`
 environment variable that the installer does set, then the usual install
 folders. Only if all three fail the path needs to be set manually: `--vmd "C:\Program Files\VMD\vmd.exe"`
-how to set the path permanently is described in the "Getting VMD onto the PATH (Windows)" section in the /docs/Details.docx
 
 ### 1.2 Create the environment
 
@@ -207,7 +206,7 @@ not from the file name. Expect a minute or two per grid.
 | `--no-vmd` | off | cubes only, no scene. |
 | `--esp-range` | `auto` | half-width of the colour scale in a.u., or if not set, it is derived from V_S,min/V_S,max on the shell. |
 | `--iso` | `0.001` | isovalue of the density surface drawn in the scene. |
-| `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` — see `docs/Details.docx`. |
+| `--opacity` | `0.50` | surface opacity, 0…1. `1.0` = opaque. Not comparable to PyMOL's `transparency` |
 | `--scale` | `auto` | zoom, a number or `auto`, derived from the molecule's size and the window height. |
 | `--fill` | `0.85` | fraction of the image height the molecule fills at `--scale auto`. |
 | `--stick-size` | `0.1` | bond radius of the Licorice skeleton in Å. Thin sticks locate a coloured patch without covering it.|
@@ -587,14 +586,9 @@ VMD_esp_visualization/
 │   ├── I-Pyr/  Cl-NO2-Pyr/                     Turbomole data
 │   ├── brombenzol/                             the halobenzene example
 │   ├── brombenzol_rainbow/                     the same molecule, --rainbow
+│   ├── Triazolam/                     
 │   └── <molecule>/               *_pi.png, *_sigma.png, *_edge.png,
 │                                 *_colorbar.png, *_settings.txt
-├── docs/
-│   ├── Details.docx              background: why VMD, viewer mechanics,
-│   │                             version choice, renderer quirks
-│   └── ComparisonVMDPyMolOutput.docx
-│                                 PyMOL and VMD output side by side:
-│                                 numbers, images, and what only PyMOL does
 └── sandbox/                      your own data and experiments, not tracked
 ```
 
