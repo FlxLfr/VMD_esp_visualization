@@ -372,6 +372,64 @@ def read_stats(cube_path):
 
 
 # ----------------------------------------------------------------------------
+# Writing the cube
+# ----------------------------------------------------------------------------
+
+def write_cube(path, info, data, atoms, stride=1, comment=""):
+    """Gaussian cube, all lengths in Bohr.
+
+    It is written to <name>.part first and renamed at the end. A full cube is
+    200 MB and takes minutes; if the run is aborted in that time - Ctrl-C, a
+    closed window, a full disk - half a file with a valid header would
+    otherwise be left behind. The next run takes that for finished, skips the
+    conversion and renders an isosurface with its rear half missing. The
+    rename is the moment the file comes into being - before that it does not
+    exist under its name.
+    """
+    if stride > 1:
+        data = data[::stride, ::stride, ::stride]
+    n = data.shape
+    vecs = info["vectors"]
+    starts = [info["grid"][i][0] for i in range(3)]
+    origin = info["origin"] + sum(starts[i] * vecs[i] for i in range(3))
+    voxel = [info["grid"][i][1] * stride * vecs[i] for i in range(3)]
+
+    tmp = path + ".part"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(f"{comment or 'written by xyzToCubeToVMDVis.py'}\n")
+        fh.write(f"{info.get('quantity') or 'volumetric data'} | "
+                 f"{info.get('title', '')} | units: Bohr\n")
+        fh.write(f"{len(atoms):5d} {origin[0]:12.6f} {origin[1]:12.6f} "
+                 f"{origin[2]:12.6f}\n")
+        for i in range(3):
+            fh.write(f"{n[i]:5d} {voxel[i][0]:12.6f} {voxel[i][1]:12.6f} "
+                     f"{voxel[i][2]:12.6f}\n")
+        for (znum, x, y, z) in atoms:
+            fh.write(f"{znum:5d} {float(znum):12.6f} {x:12.6f} {y:12.6f} "
+                     f"{z:12.6f}\n")
+
+        # Values: z fastest, 6 per line. A precompiled format pattern per z
+        # row is considerably faster than a loop over all individual values.
+        nz = n[2]
+        full, rest = divmod(nz, 6)
+        row_fmt = ("%13.5E" * 6 + "\n") * full + \
+                  ("%13.5E" * rest + "\n" if rest else "")
+        flat = data.reshape(n[0] * n[1], nz)
+        buf = []
+        for idx in range(flat.shape[0]):
+            buf.append(row_fmt % tuple(flat[idx].tolist()))
+            if len(buf) >= 4096:
+                fh.write("".join(buf))
+                buf.clear()
+        fh.write("".join(buf))
+    # Only here does <name>.cube exist. os.replace also replaces an existing
+    # file and is atomic within one file system - there is no moment in which
+    # the old cube is gone and the new one is not yet there.
+    os.replace(tmp, path)
+    return n
+
+
+# ----------------------------------------------------------------------------
 # Orientation of the three views
 #
 # This calculation is taken over from the PyMOL pipeline (render_esp.py,
@@ -604,69 +662,11 @@ def check_alignment(density, atoms, origin, voxel, label=""):
         f"computed from (a different conformer, a different orientation, or a "
         f"left-over file from an earlier run).")
 
-# ----------------------------------------------------------------------------
-# Writing the cube
-# ----------------------------------------------------------------------------
-
-def write_cube(path, info, data, atoms, stride=1, comment=""):
-    """Gaussian cube, all lengths in Bohr.
-
-    It is written to <name>.part first and renamed at the end. A full cube is
-    200 MB and takes minutes; if the run is aborted in that time - Ctrl-C, a
-    closed window, a full disk - half a file with a valid header would
-    otherwise be left behind. The next run takes that for finished, skips the
-    conversion and renders an isosurface with its rear half missing. The
-    rename is the moment the file comes into being - before that it does not
-    exist under its name.
-    """
-    if stride > 1:
-        data = data[::stride, ::stride, ::stride]
-    n = data.shape
-    vecs = info["vectors"]
-    starts = [info["grid"][i][0] for i in range(3)]
-    origin = info["origin"] + sum(starts[i] * vecs[i] for i in range(3))
-    voxel = [info["grid"][i][1] * stride * vecs[i] for i in range(3)]
-
-    tmp = path + ".part"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(f"{comment or 'written by xyzToCubeToVMDVis.py'}\n")
-        fh.write(f"{info.get('quantity') or 'volumetric data'} | "
-                 f"{info.get('title', '')} | units: Bohr\n")
-        fh.write(f"{len(atoms):5d} {origin[0]:12.6f} {origin[1]:12.6f} "
-                 f"{origin[2]:12.6f}\n")
-        for i in range(3):
-            fh.write(f"{n[i]:5d} {voxel[i][0]:12.6f} {voxel[i][1]:12.6f} "
-                     f"{voxel[i][2]:12.6f}\n")
-        for (znum, x, y, z) in atoms:
-            fh.write(f"{znum:5d} {float(znum):12.6f} {x:12.6f} {y:12.6f} "
-                     f"{z:12.6f}\n")
-
-        # Values: z fastest, 6 per line. A precompiled format pattern per z
-        # row is considerably faster than a loop over all individual values.
-        nz = n[2]
-        full, rest = divmod(nz, 6)
-        row_fmt = ("%13.5E" * 6 + "\n") * full + \
-                  ("%13.5E" * rest + "\n" if rest else "")
-        flat = data.reshape(n[0] * n[1], nz)
-        buf = []
-        for idx in range(flat.shape[0]):
-            buf.append(row_fmt % tuple(flat[idx].tolist()))
-            if len(buf) >= 4096:
-                fh.write("".join(buf))
-                buf.clear()
-        fh.write("".join(buf))
-    # Only here does <name>.cube exist. os.replace also replaces an existing
-    # file and is atomic within one file system - there is no moment in which
-    # the old cube is gone and the new one is not yet there.
-    os.replace(tmp, path)
-    return n
-
 
 # ----------------------------------------------------------------------------
 # VMD scene
 # ----------------------------------------------------------------------------
 
-# ----------------------------------------------------------------------------
 # Colour ramps
 #
 # The same anchor colours as in the PyMOL pipeline (render_esp.py, RAMP_HEX),
@@ -678,7 +678,6 @@ def write_cube(path, info, data, atoms, stride=1, comment=""):
 # Red-white-blue stays VMD's own RWB for now (pure red and blue instead of
 # PyMOL's slightly darker #d40000/#0030d4). Switching would change every
 # standard set already rendered, if only slightly.
-# ----------------------------------------------------------------------------
 
 # The VMD scale underneath the ramp. Hard-wired, not selectable: RED is
 # negative, BLUE positive - the convention of Politzer/Murray, of the
