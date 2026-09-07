@@ -586,6 +586,7 @@ VMD_esp_visualization/
 │   ├── I-Pyr/  Cl-NO2-Pyr/                     Turbomole data
 │   ├── brombenzol/                             the halobenzene example
 │   ├── brombenzol_rainbow/                     the same molecule, --rainbow
+│   ├── Triazolam/                     
 │   └── <molecule>/               *_pi.png, *_sigma.png, *_edge.png,
 │                                 *_colorbar.png, *_settings.txt
 └── sandbox/                      your own data and experiments, not tracked
