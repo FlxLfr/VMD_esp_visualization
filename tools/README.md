@@ -33,6 +33,7 @@ The expected result on this dataset:
 ```
 grid 32x37x24, spacing 0.6000 Bohr, 12 atoms, isovalue 0.001
 V_S,min = -0.01863   V_S,max = +0.03070 a.u.  (313 points)  -> +/- 0.0350
+sigma hole (Br) = +0.01528 a.u. = +9.59 kcal/(mol*e)
 ```
 
 If those numbers come out, unit conversion, index reordering, the shell band and
@@ -54,10 +55,10 @@ or a change to the scripts — not your own data.
 | σ-hole | +0.01528 (9.59 kcal/(mol·e)) | +0.01629 (10.22) | **6.2 %** |
 
 The V_S values hold to within one to three per cent; the σ-hole falls short by
-six. That is the smooth, one-sided degradation the grid study in the background
-document describes: the interpolated density smooths the isosurface outwards,
-and the potential is less positive there. Sharp features (the σ-hole) suffer,
-broad flat ones (V_S,min) barely notice.
+six. That is the smooth, one-sided degradation the grid study in section 4.2 of
+ProjectElaboration.pdf describes: the interpolated density smooths the
+isosurface outwards, and the potential is less positive there. Sharp features
+(the σ-hole) suffer, broad flat ones (V_S,min) barely notice.
 
 **The reason is git, not physics.** The dataset has to be committed so that a
 fresh clone can test itself. At 0.60 Bohr with cropping that is 32 × 37 × 24
@@ -71,13 +72,16 @@ seconds.
 a documented number matters, so a coarse grid is a feature: it runs in seconds
 and the file stays small.
 
-`render_espVMD.py`'s sister script in the PyMOL project says so at run time
-whenever the spacing goes past 0.30 Bohr:
+`render_esp.py` in the PyMOL project prints this at run time whenever the
+spacing goes past 0.30 Bohr:
 
 ```
 ! grid spacing 0.60 Bohr - too coarse for a trustworthy sigma-hole value;
   expect it to be a few per cent low. Compute finer (a smaller --stride).
 ```
+
+The VMD pipeline has no equivalent warning — `render_espVMD.py` does not check
+the spacing, so on this side the rule below is the only guard.
 
 > **Do not quote a V_S or σ-hole value from the reference dataset.** It exists to
 > prove the chain works. Numbers that go into a table come from the full-resolution
@@ -140,7 +144,8 @@ follow:
 
 - the expected values in §1 above and in the repository `README.md`,
 - `REFERENCE_SIGMA` in `SigmaHoleCalc.py`, whose self test is pinned to them,
-- the reference numbers quoted in `docs/` and in the comparison document.
+- the reference numbers quoted in the PyMOL project's
+  `docs/ProjectElaboration.pdf`.
 
 The same reference molecule exists in the sister PyMOL project. Keeping the two
 identical is what makes the cross-pipeline comparison meaningful, so rebuild
@@ -158,9 +163,9 @@ python SigmaHoleCalc.py --folder ../results/brombenzol
 ```
 
 It reads `td.cube` and `tp.cube`. The atom block sits in the cube header, so no
-structure file is needed and the alignment question of the converter document
-does not arise. Run without `--folder` and it works on `reference/brombenzol`
-as a self test (§1).
+structure file is needed and the alignment question of section 2.1 of
+PythonElaboration.pdf does not arise. Run without `--folder` and it works on
+`reference/brombenzol` as a self test (§1).
 
 ### Why rays instead of grid points
 

@@ -57,9 +57,9 @@ pipeline measures on the same cubes (REFERENCE_SIGMA below). If the two
 implementations drift apart, the run says so instead of quietly reporting a
 different number.
 
-And to be clear about what this is not: section 1 of Details.docx argues that
-two independent viewers are a control on each other. This script is a PORT,
-not an independent derivation, so it does not carry that weight. It makes the
+And to be clear about what this is not: section 3.6 of ProjectElaboration.pdf
+argues that two independent viewers are a control on each other. This script
+is a PORT, not an independent derivation, so it does not carry that weight. It makes the
 sigma hole available where until now only rendering happened.
 """
 
@@ -468,7 +468,7 @@ def main(argv=None):
     p.add_argument("--iso", type=float, default=0.001,
                    help="isovalue of the surface the sigma hole is read on "
                         "(default: 0.001). Changes the measured value - see "
-                        "section 6.2 of the converter document.")
+                        "section 4.1 of ProjectElaboration.pdf.")
     p.add_argument("--rays", type=int, default=400,
                    help="rays per halogen (default: 400)")
     p.add_argument("--cone", type=float, default=0.80,
