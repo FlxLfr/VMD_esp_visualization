@@ -534,7 +534,7 @@ Pymol_esp_visualization/tools/CreateTpTdFromSmiles.py
 ```
 
 Its output is good enough to exercise the pipeline end to end and nothing more. Running it needs a separate environment; see
-`tools/environment-testdata.yml` and `tools/README.txt` in that repository.
+`tools/environment-testdata.yml` and `tools/README.md` in that repository.
 
 ---
 
