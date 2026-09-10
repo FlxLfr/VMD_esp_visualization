@@ -211,6 +211,7 @@ not from the file name. Expect a minute or two per grid.
 | `--fill` | `0.85` | fraction of the image height the molecule fills at `--scale auto`. |
 | `--stick-size` | `0.1` | bond radius of the Licorice skeleton in Å. Thin sticks locate a coloured patch without covering it.|
 | `--rainbow` | off | rainbow ramp instead of red–white–blue; writes `esp_rainbow.tcl` so the standard scene survives. |
+| `--rcs` | off | reverse colour scale: blue negative, red positive. Applies to whichever ramp is active; the scale keeps its width and its zero, only the colours swap ends. Writes `esp_rcs.tcl`. |
 
 #### Examples
 
@@ -229,6 +230,9 @@ python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --esp-range 0.035 --opaci
 
 # second scene with the rainbow ramp, the standard one is kept
 python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --rainbow
+
+# the same, with the colour convention turned around
+python xyzToCubeToVMDVis.py td.cube tp.cube --tcl-only --rcs
 ```
 
 **Never re-run the conversion just to change the scene.** Converting takes
@@ -317,8 +321,9 @@ principal axis instead; read the file name as "axial view" in that case.
 | Option | Default | Effect |
 |---|---|---|
 | `--outdir` | `images` | output folder |
-| `--scene` | `esp.tcl` (`esp_rainbow.tcl` with `--rainbow`) | scene file to render; the smoke test uses `esp_check.tcl` |
+| `--scene` | `esp.tcl` (`esp_rainbow.tcl` with `--rainbow`, `esp_rcs.tcl` with `--rcs`) | scene file to render; the smoke test uses `esp_check.tcl` |
 | `--rainbow` | off | render the rainbow scene into a separate `<prefix>_rainbow_*` set |
+| `--rcs` | off | render the reversed scene into a separate `<prefix>_rcs_*` set; the colour bar is reversed with it |
 | `--res` | `1600x1280` | image size in px |
 | `--backgrounds` | `white` | one or more background colours, e.g. `--backgrounds white black` renders each view once per colour |
 | `--keep-tga` | off | keep VMD's intermediate TGA files |
@@ -337,6 +342,9 @@ python ../../scripts/render_espVMD.py --res 2400x1920
 
 # second image set with the rainbow ramp, standard set kept
 python ../../scripts/render_espVMD.py --rainbow
+
+# the same, with the colour convention turned around
+python ../../scripts/render_espVMD.py --rcs
 
 # VMD not on the PATH
 python ../../scripts/render_espVMD.py --vmd "C:\Program Files\VMD\vmd.exe"
@@ -359,6 +367,20 @@ method.
 
 So the rainbow images and their colour bar match their PyMOL counterparts
 anchor for anchor. Red–white–blue still uses VMD's built-in `RWB`.
+
+**On `--rcs`.** The reverse colour scale turns the anchor list around and
+nothing else: the scale keeps its width and its zero, only the sign convention
+of the colours is inverted, so blue becomes negative and red positive. It
+applies to both ramps and combines with `--rainbow`. Mechanically it does not
+select another built-in VMD scale, it hands the reversed anchors to the same
+`esp_ramp` the rainbow already uses — which is why reversed red–white–blue
+switches from VMD's pure red and blue to the hex anchors and then matches the
+PyMOL `--rcs` set exactly. The colour bar is reversed with the scene, so the
+legend never contradicts the image.
+
+A reversed ramp does not just look different, it looks like the opposite
+statement. Say which convention a figure uses in its caption, and ship the
+`*_colorbar.png` beside it.
 
 Rainbow output never collides with the standard set: the scene is
 `esp_rainbow.tcl`, the images are `<prefix>_rainbow_pi.png` and so on. Use it as
@@ -409,12 +431,13 @@ files, so no rendering is needed to find them.
 | `--scale`, `--fill` | `auto`, `0.85` | zoom, passed through |
 | `--stick-size` | `0.1` | bond radius of the Licorice skeleton in Å, passed through |
 | `--rainbow` | off | rainbow ramp; writes `esp_rainbow.tcl` and a separate `<molecule>_rainbow_*` set |
+| `--rcs` | off | reverse colour scale; writes `esp_rcs.tcl` and a separate `<molecule>_rcs_*` set, colour bar included |
 | `--no-render` | off | convert and write the scene only |
 | `--res` | `1600x1280` | passed through |
 | `--backgrounds` | `white` | one or more background colours, passed through |
 | `--keep-tga`, `--dpi`, `--vmd` | | passed through |
 | `--images-dir` | `images` (`images_check` for the built-in reference run) | output folder inside each molecule folder |
-| `--summary` | `<root>/summary_HH-MM_DD-MM-YYYY.csv` | path of the CSV summary. The time stamp keeps a later run from overwriting an earlier one, two runs on the same day included; `--rainbow` adds `_rainbow`, the smoke test `_check`. |
+| `--summary` | `<root>/summary_HH-MM_DD-MM-YYYY.csv` | path of the CSV summary. The time stamp keeps a later run from overwriting an earlier one, two runs on the same day included; `--rainbow` adds `_rainbow`, `--rcs` adds `_rcs`, the smoke test `_check`. |
 
 ### Examples
 
@@ -431,6 +454,9 @@ python run_allVMD.py --root ../sandbox --only "*benzol"
 
 # second image set with the rainbow ramp, standard set kept
 python run_allVMD.py --root ../sandbox --rainbow
+
+# the same, with the colour convention turned around
+python run_allVMD.py --root ../sandbox --rcs
 
 # convert and write the scenes, render later
 python run_allVMD.py --root ../sandbox --no-render
@@ -461,15 +487,17 @@ Per molecule folder:
 
 With `--rainbow` the same names appear with `_rainbow` inserted
 (`<prefix>_rainbow_pi.png`, `esp_rainbow.tcl`, …), so a rainbow run never
-overwrites the standard set.
+overwrites the standard set. `--rcs` inserts `_rcs` in the same way and the two
+combine: `--rainbow --rcs` writes `<prefix>_rainbow_rcs_pi.png` and
+`esp_rainbow_rcs.tcl`.
 
 The smoke test writes the same files under `_check` names (`esp_check.tcl`,
 `images_check/`, `summary_check_<time>_<date>.csv`) so it can never overwrite the
 committed reference.
 
 Per run, `run_allVMD.py` writes `summary_<HH-MM>_<DD-MM-YYYY>.csv`. A `--rainbow` run
-writes `summary_rainbow_<time>_<date>.csv` instead, so the two sets never overwrite
-each other:
+writes `summary_rainbow_<time>_<date>.csv` instead, and `--rcs` adds `_rcs`, so the
+sets never overwrite each other:
 
 | Column | Content |
 |---|---|
@@ -481,8 +509,8 @@ each other:
 | `VS_min_au`, `VS_max_au` | surface ESP extrema in a.u. |
 | `VS_min_kJ`, `VS_max_kJ` | the same in kJ/(mol·e) |
 | `esp_range_used_au`, `esp_range_mode` | colour range and how it was chosen |
-| `colormap` | `redblue`, or `rainbow` with `--rainbow` — the same column name as in the PyMOL summary |
-| `color_scale` | the VMD scale underneath the ramp: `RWB`, or `RGB` with `--rainbow` |
+| `colormap` | `redblue`, or `rainbow` with `--rainbow`, with `_rcs` appended when the scale was reversed — the same column name as in the PyMOL summary |
+| `color_scale` | the VMD scale underneath the ramp: `RWB`, or `RGB` with `--rainbow`. With `--rcs` it stays the underlay — `esp_ramp` overwrites the colour table on top of it |
 | `opacity` | surface opacity used |
 | `resolution_px`, `renderer` | image size and the renderer of the first pass |
 | `backgrounds` | the background colours rendered |

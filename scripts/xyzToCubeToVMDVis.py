@@ -679,14 +679,25 @@ def check_alignment(density, atoms, origin, voxel, label=""):
 # PyMOL's slightly darker #d40000/#0030d4). Switching would change every
 # standard set already rendered, if only slightly.
 
-# The VMD scale underneath the ramp. Hard-wired, not selectable: RED is
-# negative, BLUE positive - the convention of Politzer/Murray, of the
-# literature and of the PyMOL pipeline. There used to be --color-scale for
-# this. It was taken out, because a reversed ramp does not give an image that
-# LOOKS different, it gives one that appears to show the opposite statement -
-# and because the colour bar comes from matplotlib and would not have followed
-# the reversal: the images would have been mirrored, the legend beside them
-# not.
+# The VMD scale underneath the ramp. RED is negative, BLUE positive - the
+# convention of Politzer/Murray, of the literature and of the PyMOL pipeline,
+# and it stays the default.
+#
+# A free --color-scale used to exist here and was taken out for two reasons: a
+# reversed ramp does not give an image that LOOKS different, it gives one that
+# appears to show the opposite statement; and the colour bar comes from
+# matplotlib and did not follow the reversal, so the images would have been
+# mirrored and the legend beside them not. --rcs brings the reversal back as
+# ONE deliberate switch and closes the second point: the bar is reversed with
+# it (render_espVMD.colorbar), the settings file records it and the files get
+# a name of their own. The first point remains a caveat, not a bug - state the
+# convention in the caption.
+#
+# Mechanically --rcs does not select another built-in VMD scale. It hands the
+# reversed anchor colours to esp_ramp, which overwrites all 1024 entries of
+# the colour table - the path the rainbow already takes. That way the reversal
+# needs no VMD scale name and lands on exactly the colours the PyMOL pipeline
+# uses for --rcs.
 #
 # With --rainbow, RGB is only the underlay; esp_ramp afterwards overwrites the
 # colour table with the five anchor colours from RAMP_HEX.
@@ -705,11 +716,18 @@ RAMP_HEX = {
 }
 
 
-def ramp_stops(name):
-    """Anchor colours as a Tcl list {{r g b} {r g b} ...}, values 0..1."""
+def ramp_stops(name, reverse=False):
+    """Anchor colours as a Tcl list {{r g b} {r g b} ...}, values 0..1.
+
+    ``reverse`` turns the list around; esp_ramp then walks the same 1024
+    entries in the opposite direction. The scale keeps its width and its zero,
+    only the sign convention of the colours is inverted.
+    """
     hexes = RAMP_HEX.get(name)
     if not hexes:
         return ""
+    if reverse:
+        hexes = list(reversed(hexes))
     out = []
     for h in hexes:
         h = h.lstrip("#")
@@ -720,7 +738,7 @@ def ramp_stops(name):
 
 def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
                      opacity=0.50, scale="auto", fill=0.85,
-                     sources="", atoms=None, rainbow=False,
+                     sources="", atoms=None, rainbow=False, rcs=False,
                      stick_size=STICK_SIZE_DEFAULT):
     """Fills in esp_template.tcl.
 
@@ -774,7 +792,11 @@ def write_vmd_script(path, rho_cube, esp_cube, esp_range, stats, iso=0.001,
         "@@SCALE@@": scale if scale == "auto" else f"{scale:g}",
         "@@FILL@@": f"{fill:g}",
         "@@COLORSCALE@@": COLOR_SCALE["rainbow" if rainbow else "redblue"],
-        "@@RAMP_STOPS@@": ramp_stops("rainbow" if rainbow else None),
+        # Without --rcs and without --rainbow the list stays empty and VMD
+        # keeps its own RWB. --rcs always goes through esp_ramp, for both ramps.
+        "@@RAMP_STOPS@@": ramp_stops(
+            "rainbow" if rainbow else ("redblue" if rcs else None),
+            reverse=rcs),
         "@@STATS@@": note + axis_note,
         "@@ROT_PI@@": rot["pi"],
         "@@ROT_EDGE@@": rot["edge"],
@@ -839,6 +861,11 @@ def main(argv=None):
                    help="rainbow ramp instead of red-white-blue. Writes "
                         "esp_rainbow.tcl, so that the standard scene is "
                         "kept.")
+    g.add_argument("--rcs", action="store_true",
+                   help="reverse colour scale: blue negative, red positive. "
+                        "Applies to whichever ramp is active; the scale keeps "
+                        "its width and its zero, only the colours swap ends. "
+                        "Writes esp_rcs.tcl.")
     args = p.parse_args(argv)
 
     verbose = not args.quiet
@@ -939,14 +966,15 @@ def main(argv=None):
 
     # Its own file name, otherwise a rainbow run overwrites the scene of the
     # red-white-blue run - the images are kept apart for the same reason.
-    tcl = os.path.join(outdir, "esp_rainbow.tcl" if args.rainbow else "esp.tcl")
+    tcl = os.path.join(outdir, "esp" + ("_rainbow" if args.rainbow else "")
+                       + ("_rcs" if args.rcs else "") + ".tcl")
     write_vmd_script(tcl, os.path.basename(cubes["density"]),
                      os.path.basename(cubes["esp"]), rng, stats, iso=args.iso,
                      opacity=args.opacity,
                      scale=(args.scale if str(args.scale) == "auto"
                             else float(args.scale)),
                      fill=args.fill,
-                     rainbow=args.rainbow,
+                     rainbow=args.rainbow, rcs=args.rcs,
                      stick_size=args.stick_size,
                      sources=", ".join(os.path.basename(g) for g in args.grids))
     if verbose:

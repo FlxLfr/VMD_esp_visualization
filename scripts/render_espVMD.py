@@ -181,7 +181,7 @@ def tga_to_png(outdir, prefix, keep_tga=False, suffix=""):
     return done
 
 
-def colorbar(path, rng, dpi=300, rainbow=False):
+def colorbar(path, rng, dpi=300, rainbow=False, rcs=False):
     """Horizontal colour bar as a PNG of its own.
 
     Red-white-blue in the same order as VMD's RWB colour scale, so that the
@@ -192,6 +192,11 @@ def colorbar(path, rng, dpi=300, rainbow=False):
     - blue, the same as in the PyMOL pipeline. VMD's built-in scales know only
     three; the scene therefore reprograms the colour table itself (esp_ramp in
     esp_template.tcl), so that bar and image agree.
+
+    With ``rcs`` the bar is reversed together with the scene. The reversed
+    red-white-blue additionally switches from VMD's own pure red and blue to
+    the hex anchors, because --rcs drives esp_ramp for that ramp too and the
+    bar has to show the colours actually written into the colour table.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -204,8 +209,14 @@ def colorbar(path, rng, dpi=300, rainbow=False):
     # VMD's colour table. Bar and image therefore show the same ramp, and each
     # project shows the same one as the other.
     RAINBOW = ["#d40000", "#f0e000", "#00a000", "#00c8d4", "#0030d4"]
-    cmap = LinearSegmentedColormap.from_list(
-        "esp", RAINBOW if rainbow else ["red", "white", "blue"])
+    REDBLUE = ["#d40000", "#ffffff", "#0030d4"]
+    if rainbow:
+        cols = RAINBOW
+    else:
+        cols = REDBLUE if rcs else ["red", "white", "blue"]
+    if rcs:
+        cols = list(reversed(cols))
+    cmap = LinearSegmentedColormap.from_list("esp", cols)
     fig = plt.figure(figsize=(6.0, 1.0))
     ax = fig.add_axes([0.06, 0.42, 0.88, 0.30])
     cb = ColorbarBase(ax, cmap=cmap, norm=Normalize(-rng, rng),
@@ -218,7 +229,7 @@ def colorbar(path, rng, dpi=300, rainbow=False):
 
 
 def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
-             rainbow=False, backgrounds=("white",)):
+             rainbow=False, rcs=False, backgrounds=("white",)):
     lines = [
         "Render parameters (written by render_espVMD.py)",
         "=" * 55,
@@ -245,9 +256,14 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
         ]
     lines += [
         f"Colour scale      : {-rng:+.4f} .. {rng:+.4f} a.u.",
-        (f"Colour ramp       : RGB (rainbow: red negative, green zero, "
-         f"blue positive)" if rainbow else
-         f"Colour ramp       : RWB (red negative, white zero, blue positive)"),
+        ((f"Colour ramp       : RGB (rainbow: blue negative, green zero, "
+          f"red positive)  [reversed]" if rainbow else
+          f"Colour ramp       : RWB reversed (blue negative, white zero, "
+          f"red positive)  [reversed]") if rcs else
+         (f"Colour ramp       : RGB (rainbow: red negative, green zero, "
+          f"blue positive)" if rainbow else
+          f"Colour ramp       : RWB (red negative, white zero, blue "
+          f"positive)")),
         f"Background        : {', '.join(backgrounds)}",
         f"Image size        : {size[0]} x {size[1]} px" if size
         else "Image size        : unknown",
@@ -269,7 +285,7 @@ def settings(path, prefix, iso, rng, stats, size, renderer, made=None,
 def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
                vmd=None, res="1600x1280", backgrounds=None,
                keep_tga=False, dpi=300, no_vmd=False, scene=None,
-               rainbow=False, verbose=True):
+               rainbow=False, rcs=False, verbose=True):
     """Image set for the CURRENT directory. Expects the scene and the cubes.
 
     Returns a dict with made (view -> what it was rendered with), renderer,
@@ -280,8 +296,10 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     # Its own name suffix and its own scene, otherwise a rainbow run
     # overwrites the red-white-blue image set of the same molecule.
     # prefix stays the molecule name, out_prefix names the files.
-    scene = scene or ("esp_rainbow.tcl" if rainbow else "esp.tcl")
-    out_prefix = f"{prefix}_rainbow" if rainbow else prefix
+    scene = scene or ("esp" + ("_rainbow" if rainbow else "")
+                      + ("_rcs" if rcs else "") + ".tcl")
+    out_prefix = prefix + ("_rainbow" if rainbow else "") + ("_rcs" if rcs
+                                                             else "")
     os.makedirs(outdir, exist_ok=True)
     scene_iso, scene_rng, scene_stats = read_scene(scene)
     iso = scene_iso if iso is None else iso
@@ -376,14 +394,14 @@ def render_all(outdir="images", prefix=None, iso=None, rng=None, stats=None,
     made = made_per_bg.get(backgrounds[0], {})
 
     cb = os.path.join(outdir, f"{out_prefix}_colorbar.png")
-    colorbar(cb, rng, dpi=dpi, rainbow=rainbow)
+    colorbar(cb, rng, dpi=dpi, rainbow=rainbow, rcs=rcs)
     if verbose:
         print(f"[3] colour bar -> {cb}  (+/- {rng:.4f} a.u.)")
 
     st = os.path.join(outdir, f"{out_prefix}_settings.txt")
     size = done[0][1] if done else None
     settings(st, prefix, iso, rng, stats, size, used_renderer, made,
-             rainbow=rainbow, backgrounds=backgrounds)
+             rainbow=rainbow, rcs=rcs, backgrounds=backgrounds)
     if verbose:
         print(f"[4] -> {st}")
 
@@ -411,13 +429,18 @@ def main(argv=None):
     p.add_argument("--rainbow", action="store_true",
                    help="rainbow ramp: renders esp_rainbow.tcl and writes "
                         "<prefix>_rainbow_*, the standard set is kept")
+    p.add_argument("--rcs", action="store_true",
+                   help="reverse colour scale: blue negative, red positive. "
+                        "Renders esp_rcs.tcl, reverses the colour bar with it "
+                        "and writes <prefix>_rcs_*; the standard set is kept")
     p.add_argument("--scene", default=None,
                    help="scene file in the molecule folder (default esp.tcl, "
-                        "with --rainbow esp_rainbow.tcl; the self test uses "
-                        "esp_check.tcl)")
+                        "with --rainbow esp_rainbow.tcl and with --rcs "
+                        "esp_rcs.tcl; the self test uses esp_check.tcl)")
     args = p.parse_args(argv)
     if args.scene is None:
-        args.scene = "esp_rainbow.tcl" if args.rainbow else "esp.tcl"
+        args.scene = ("esp" + ("_rainbow" if args.rainbow else "")
+                      + ("_rcs" if args.rcs else "") + ".tcl")
 
     if not os.path.exists(args.scene):
         # The scene comes from the first step, not from here. If the cubes
@@ -435,7 +458,7 @@ def main(argv=None):
 
     render_all(outdir=args.outdir, vmd=args.vmd, res=args.res,
                backgrounds=args.backgrounds, scene=args.scene,
-               rainbow=args.rainbow,
+               rainbow=args.rainbow, rcs=args.rcs,
                keep_tga=args.keep_tga, dpi=args.dpi, no_vmd=args.no_vmd)
     return 0
 

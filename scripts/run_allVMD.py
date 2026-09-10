@@ -241,8 +241,8 @@ FIELDS = ["molecule", "structure", "grid", "iso_au", "shell_points",
           "backgrounds", "views"]
 
 
-def summary_name(is_reference, rainbow, when=None):
-    """summary[_check][_rainbow]_HH-MM_DD-MM-YYYY.csv
+def summary_name(is_reference, rainbow, rcs=False, when=None):
+    """summary[_check][_rainbow][_rcs]_HH-MM_DD-MM-YYYY.csv
 
     Time-stamped on purpose, so that a later run does not silently overwrite
     the summary of an earlier one. The date alone was not enough: two runs on
@@ -264,6 +264,8 @@ def summary_name(is_reference, rainbow, when=None):
         parts.append("check")
     if rainbow:
         parts.append("rainbow")
+    if rcs:
+        parts.append("rcs")
     parts.append(stamp)
     return "_".join(parts) + ".csv"
 
@@ -426,6 +428,12 @@ def main(argv=None):
                    help="rainbow ramp instead of red-white-blue. Writes "
                         "esp_rainbow.tcl and an image set of its own, "
                         "<molecule>_rainbow_*; the standard set is kept.")
+    g.add_argument("--rcs", action="store_true",
+                   help="reverse colour scale: blue negative, red positive. "
+                        "Applies to whichever ramp is active and to the "
+                        "colour bar. Writes esp_rcs.tcl and an image set of "
+                        "its own, <molecule>_rcs_*; the standard set is "
+                        "kept.")
 
     g = p.add_argument_group("Rendering")
     g.add_argument("--no-render", action="store_true",
@@ -445,7 +453,8 @@ def main(argv=None):
     g.add_argument("--summary", default=None,
                    help="path of the CSV (default: "
                         "<root>/summary_HH-MM_DD-MM-YYYY.csv, with _check "
-                        "on the self test and _rainbow with --rainbow)")
+                        "on the self test, _rainbow with --rainbow and "
+                        "_rcs with --rcs)")
     args = p.parse_args(argv)
     # For the recommendation at the end: the same call, only with a different
     # scale.
@@ -459,7 +468,8 @@ def main(argv=None):
     # scene of the red-white-blue run - the images are kept apart for the same
     # reason (<molecule>_rainbow_*).
     scene_name = ("esp_check" if is_reference else "esp") \
-        + ("_rainbow" if args.rainbow else "") + ".tcl"
+        + ("_rainbow" if args.rainbow else "") \
+        + ("_rcs" if args.rcs else "") + ".tcl"
     if args.images_dir is None:
         args.images_dir = "images_check" if is_reference else "images"
     # For the summary only - the ramp itself is fixed, see COLOR_SCALE in
@@ -478,7 +488,7 @@ def main(argv=None):
     if is_reference:
         print("  Reference dataset (self test).")
         print(f"  Writes to '{args.images_dir}/', {scene_name} and "
-              f"{os.path.basename(summary_name(True, args.rainbow))},")
+              f"{os.path.basename(summary_name(True, args.rainbow, args.rcs))},")
         print("  so that the committed reference files stay untouched.")
         print("  Afterwards compare your numbers with reference/summary.csv")
         print("  and your images with reference/*/images/.")
@@ -580,7 +590,7 @@ def main(argv=None):
             opacity=args.opacity,
             scale=(args.scale if str(args.scale) == "auto"
                    else float(args.scale)),
-            fill=args.fill, rainbow=args.rainbow,
+            fill=args.fill, rainbow=args.rainbow, rcs=args.rcs,
             stick_size=args.stick_size,
             sources=", ".join(os.path.basename(c)
                               for c in e["cubes"].values()))
@@ -588,7 +598,8 @@ def main(argv=None):
 
         row = {"prefix": name, "struct": e["struct"], "grid": e["grid"],
                "stats": e["stats"], "rng": rng, "iso": args.iso, "mode": mode,
-               "colormap": "rainbow" if args.rainbow else "redblue",
+               "colormap": (("rainbow" if args.rainbow else "redblue")
+                            + ("_rcs" if args.rcs else "")),
                "color_scale": color_scale, "opacity": args.opacity,
                "backgrounds": args.backgrounds,
                "made": {}, "size": None, "renderer": ""}
@@ -603,7 +614,7 @@ def main(argv=None):
                     outdir=args.images_dir, prefix=name, iso=args.iso,
                     rng=rng, stats=e["stats"], vmd=args.vmd, res=args.res,
                     backgrounds=args.backgrounds,
-                    scene=scene_name, rainbow=args.rainbow,
+                    scene=scene_name, rainbow=args.rainbow, rcs=args.rcs,
                     keep_tga=args.keep_tga, dpi=args.dpi, verbose=True)
             finally:
                 os.chdir(cwd)
@@ -612,7 +623,7 @@ def main(argv=None):
         rows.append(row)
 
     summary = args.summary or os.path.join(
-        args.root, summary_name(is_reference, args.rainbow))
+        args.root, summary_name(is_reference, args.rainbow, args.rcs))
     write_summary(summary, rows,
                   common=None if mode == "auto" else common,
                   advice=needed if mode == "auto" else None)
