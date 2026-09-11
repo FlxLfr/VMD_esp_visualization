@@ -1,7 +1,7 @@
-# `tools/` — the reference dataset and the σ-hole
+# `tools/` creating the reference dataset and calculating the σ-hole
 
 Two scripts that sit **outside** the rendering workflow. Neither is called by
-`run_allVMD.py`, and nothing in `scripts/` imports them.
+`run_allVMD.py` and nothing in `scripts/` imports them.
 
 | Script | Purpose | Documented in |
 |---|---|---|
@@ -24,73 +24,53 @@ processes it and writes to separate `_check` names (`images_check/`,
 `esp_check.tcl`, `summary_check_*.csv`), so the committed reference files stay
 untouched.
 
-The self test answers exactly one question: **does the installation run, and do
+The smoke test answers exactly one question: **does the installation run, and do
 the documented numbers come out?** It does not answer "is this an accurate
-V_S value" — see §2.
+V_S value"
 
 The expected result on this dataset:
 
 ```
-grid 32x37x24, spacing 0.6000 Bohr, 12 atoms, isovalue 0.001
 V_S,min = -0.01863   V_S,max = +0.03070 a.u.  (313 points)  -> +/- 0.0350
-sigma hole (Br) = +0.01528 a.u. = +9.59 kcal/(mol*e)
 ```
 
-If those numbers come out, unit conversion, index reordering, the shell band and
-the colour-scale rule all work. If they do not, the problem is the installation
-or a change to the scripts — not your own data.
+If those numbers come out and the interactive esp_check.tcl script looks exactly the same as the 
+esp.tcl script, the installation was successful 
 
 ---
 
-## 2  Why the grid is 0.60 Bohr, and what that costs
+## 2  Why the grid is 0.60 Bohr
 
-0.60 Bohr is 0.317 Å — five times coarser than the production grids at 0.12 Bohr
-(0.063 Å). That is a deliberate choice, and it is measurable:
+0.60 Bohr is 0.317 Å: five times coarser than the production grids at 0.12 Bohr
+(0.063 Å). That is a deliberate choice and it is measurable:
 
 | | reference, 0.60 Bohr | production, 0.12 Bohr | deviation |
 |---|---|---|---|
 | shell points | 313 | 38 010 | 0.8 % of the points |
 | V_S,min | −0.01863 | −0.01882 | 1.0 % |
 | V_S,max | +0.03070 | +0.03154 | 2.7 % |
-| σ-hole | +0.01528 (9.59 kcal/(mol·e)) | +0.01629 (10.22) | **6.2 %** |
+| σ-hole (Calculated with SigmaHoleCalc.py)| +0.01528 (9.59 kcal/(mol·e)) | +0.01629 (10.22) | **6.2 %** |
 
-The V_S values hold to within one to three per cent; the σ-hole falls short by
+The V_S values hold to within one to three per cent. The σ-hole falls short by
 six. That is the smooth, one-sided degradation the grid study in section 4.2 of
 ProjectElaboration.pdf describes: the interpolated density smooths the
-isosurface outwards, and the potential is less positive there. Sharp features
+isosurface outwards and the potential is less positive there. Sharp features
 (the σ-hole) suffer, broad flat ones (V_S,min) barely notice.
 
 **The reason is git, not physics.** The dataset has to be committed so that a
 fresh clone can test itself. At 0.60 Bohr with cropping that is 32 × 37 × 24
 points, about 1.7 MB per `pointval` file. The same molecule at full resolution
 is 15.8 million points and roughly 200 MB per cube — and GitHub rejects anything
-above 100 MB. A middle course at 0.30 Bohr would be some 14 MB per file:
-possible, but heavy for a repository whose self test is meant to finish in
-seconds.
+above 100 MB.
 
 **And the test asks for determinism, not accuracy.** Only the reproducibility of
 a documented number matters, so a coarse grid is a feature: it runs in seconds
 and the file stays small.
 
-`render_esp.py` in the PyMOL project prints this at run time whenever the
-spacing goes past 0.30 Bohr:
-
-```
-! grid spacing 0.60 Bohr - too coarse for a trustworthy sigma-hole value;
-  expect it to be a few per cent low. Compute finer (a smaller --stride).
-```
-
-The VMD pipeline has no equivalent warning — `render_espVMD.py` does not check
-the spacing, so on this side the rule below is the only guard.
 
 > **Do not quote a V_S or σ-hole value from the reference dataset.** It exists to
 > prove the chain works. Numbers that go into a table come from the full-resolution
 > grids under `sandbox/` or `results/`.
-
-One consequence worth knowing: the self test built into `SigmaHoleCalc.py` is
-pinned to the coarse value +0.01528 a.u. For its purpose — are the two
-implementations still the same code? — that is enough, because both compute the
-same six-per-cent-low number. It does not exercise the fine-grid regime.
 
 ---
 
@@ -103,8 +83,7 @@ python tools/make_reference.py sandbox/brombenzol --name brombenzol
 ```
 
 It writes a decimated `td.xyz` / `tp.xyz` pair in Turbomole `pointval` format to
-`reference/<name>/`, and copies the structure file along — without it
-`run_allVMD.py` will not recognise the folder.
+`reference/<name>/` and copies the structure file along.
 
 ### Options
 
@@ -131,21 +110,12 @@ bring 1.25 GB down to a few MB.
 ### Why `pointval` and not cube
 
 The self test is meant to exercise the whole chain, `xyzToCubeToVMDVis.py`
-included — and unit conversion and index reordering are the two steps most
+included, unit conversion and index reordering are the two steps most
 likely to break. Shipping ready-made cubes would skip exactly those. It also
 prefers reading an existing `.cube` if one is present in the source folder,
 because that takes seconds where parsing the raw `pointval` files takes minutes;
 the output is identical either way.
 
-### If you rebuild the reference
-
-Changing the dataset changes the documented numbers, and three places have to
-follow:
-
-- the expected values in §1 above and in the repository `README.md`,
-- `REFERENCE_SIGMA` in `SigmaHoleCalc.py`, whose self test is pinned to them,
-- the reference numbers quoted in the PyMOL project's
-  `docs/ProjectElaboration.pdf`.
 
 The same reference molecule exists in the sister PyMOL project. Keeping the two
 identical is what makes the cross-pipeline comparison meaningful, so rebuild
@@ -165,7 +135,7 @@ python SigmaHoleCalc.py --folder ../results/brombenzol
 It reads `td.cube` and `tp.cube`. The atom block sits in the cube header, so no
 structure file is needed and the alignment question of section 2.1 of
 PythonElaboration.pdf does not arise. Run without `--folder` and it works on
-`reference/brombenzol` as a self test (§1).
+`reference/brombenzol` as a self test.
 
 ### Why rays instead of grid points
 
@@ -184,7 +154,7 @@ interpolation. Both numbers are printed, so the difference stays visible:
 
 The bracket is the same one `render_esp.py` prints in the PyMOL project, so the
 two consoles can be read side by side. The ray count is appended only when rays
-were lost — "400 of 400" every time is noise, a shortfall is not.
+were lost.
 
 **Read the angle.** It is the quality control. `0.0 degrees` means the maximum
 sits on the axis, the normal case. A value at the rim of the cone (≈36.9° at the
@@ -199,7 +169,7 @@ first. A molecule without a halogen says so and stops.
 | Option | Default | Effect |
 |---|---|---|
 | `--folder` | `reference/brombenzol` (self test) | molecule folder with `td.cube` and `tp.cube` |
-| `--iso` | `0.001` | **isovalue the σ-hole is read on — changes the measured value.** See below. |
+| `--iso` | `0.001` | **isovalue the σ-hole is read on ** |
 | `--rays` | `400` | rays per halogen |
 | `--cone` | `0.80` | cosine of the cone half-angle, i.e. 36.9° |
 | `--step` | `0.02` | step along a ray in Bohr |
@@ -209,8 +179,8 @@ first. A molecule without a halogen says so and stops.
 
 ρ = 0.001 a.u. is the Politzer/Murray convention and the default here, but it is
 a convention, not a constant of nature. Part of the literature reports σ-holes on
-ρ = 0.002 a.u., and those numbers are not comparable with 0.001 values — the
-isovalue is the single parameter that moves the result most. Bromobenzene on the
+ρ = 0.002 a.u., and those numbers are not comparable with 0.001 values. The
+isovalue is the single parameter that moves the result most (see ProjectElaboration.pdf §4.1). Bromobenzene on the
 same 251³ grid:
 
 | `--iso` | σ-hole | |
@@ -228,21 +198,3 @@ the electrons.
 python SigmaHoleCalc.py --folder ../sandbox/brombenzol --iso 0.002
 ```
 
-`--iso` exists to reproduce someone else's choice, not to improve on 0.001. Every
-value the script prints carries its isovalue in the header line, and the CSV
-records it in the `iso_au` column, so a number can always be traced back to the
-surface it was measured on.
-
-> The same applies in the PyMOL pipeline, where `--iso` additionally moves the
-> surface that is drawn. Here nothing is rendered, so `--iso` affects the
-> measurement only.
-
-### On the duplication
-
-The same method exists in the PyMOL project (`render_esp.py`). Two
-implementations of one numerical procedure have to agree forever, so the self
-test pins them together: run without arguments, `SigmaHoleCalc.py` compares its
-result on `reference/brombenzol` against the value the PyMOL pipeline measures on
-the same cubes and fails loudly if they have drifted apart. Both give
-+0.01528 a.u. there, and they agree to eight decimals on every molecule in
-`results/`.
