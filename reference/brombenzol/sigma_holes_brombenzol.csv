@@ -1,0 +1,2 @@
+molecule,halogen,atom_index,grid,spacing_bohr,iso_au,sigma_hole_au,sigma_hole_kJ,sigma_hole_kcal,sigma_angle_deg,sigma_method,rays_hit,n_rays,pointbased_au,cap_points,belt_min_au,belt_points
+brombenzol,Br12,12,251x251x251,0.1200,0.001,0.01629,42.8,10.22,0.00,interpolated,400,400,0.01748,1373,-0.01882,6768
